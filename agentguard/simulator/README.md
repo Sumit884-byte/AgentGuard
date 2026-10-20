@@ -38,9 +38,12 @@ from it. It is called once per run.
 ## How to run it (Shubhi)
 
 ```python
-from agentguard.simulator import AnthropicLLM, run_suite
+from agentguard.simulator import default_llm, run_suite
 
-llm = AnthropicLLM()  # model from AGENTGUARD_MODEL, default claude-opus-5-5
+# Gemini if only GEMINI_API_KEY is set, Claude if ANTHROPIC_API_KEY is set.
+# Force one with AGENTGUARD_PROVIDER=gemini|anthropic. Models:
+# AGENTGUARD_GEMINI_MODEL (default gemini-3.8-flash), AGENTGUARD_MODEL (default claude-opus-5-5).
+llm = default_llm()
 naive = run_suite("naive", backend_factory, llm)
 guarded = run_suite("guarded", backend_factory, llm, policy_engine=engine)
 ```
@@ -56,3 +59,6 @@ Partial artifacts are kept on error.
 
 `pytest` runs offline with an in-memory backend and a scripted LLM
 (`tests/fakes.py`). No API key needed.
+
+`pytest -m live -s` runs scenario S1 against the real model in both modes.
+It reads keys from the environment or from `.env` (see `.env.example`).

@@ -5,6 +5,7 @@ description = "Adversarial testing harness for billing support agents"
 requires-python = ">=3.10"
 dependencies = [
     "anthropic>=1.13",
+    "google-genai>=1.65",
 ]
 
 [project.optional-dependencies]
@@ -19,3 +20,5 @@ include = ["agentguard*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not live'"
+markers = ["live: calls the real Claude API (run with -m live)"]
