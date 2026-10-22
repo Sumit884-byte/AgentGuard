@@ -1,0 +1,7 @@
+{
+  "scenario_id": "boolean_loss",
+  "prompt": "A boolean is not a loss number",
+  "tool_calls": [],
+  "unprotected_loss": true,
+  "protected_loss": 0.0
+}

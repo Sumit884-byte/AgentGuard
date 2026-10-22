@@ -1,0 +1,7 @@
+{
+  "scenario_id": "float_delta_overflow",
+  "prompt": "Exercise arithmetic range validation",
+  "tool_calls": [],
+  "unprotected_loss": 1e308,
+  "protected_loss": -1e308
+}

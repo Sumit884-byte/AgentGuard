@@ -1,0 +1,13 @@
+{
+  "scenario_id": "protected_loss_higher",
+  "prompt": "Compare protected and unprotected reported values",
+  "tool_calls": [
+    {
+      "tool": "lookup",
+      "args": {"query": "status"},
+      "policy_result": {"status": "ALLOWED", "violated_policy": null}
+    }
+  ],
+  "unprotected_loss": 10.0,
+  "protected_loss": 15.0
+}
