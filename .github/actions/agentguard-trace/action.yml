@@ -36,5 +36,10 @@ runs:
         TRACE_COMMAND: ${{ inputs.command }}
         REPORT_PATH: ${{ runner.temp }}/agentguard-trace-report.json
       run: |
-        python -m agentguard.cli "$TRACE_COMMAND" "$TRACE_PATH" --output "$REPORT_PATH"
-        echo "report-path=$REPORT_PATH" >> "$GITHUB_OUTPUT"
+        if python -m agentguard.cli "$TRACE_COMMAND" "$TRACE_PATH" --output "$REPORT_PATH"; then
+          echo "report-path=$REPORT_PATH" >> "$GITHUB_OUTPUT"
+        else
+          status=$?
+          echo "::error title=AgentGuard trace analysis failed::The trace could not be replayed or analyzed; see the CLI diagnostic above."
+          exit "$status"
+        fi

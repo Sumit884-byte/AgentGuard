@@ -122,3 +122,99 @@ def test_damage_delta_that_overflows_float_is_reported_clearly():
     trace = load_trace(FIXTURES / "float_delta_overflow.json")
     with pytest.raises(TraceValidationError, match="calculated damage_delta"):
         calculate_damage_delta(trace)
+
+
+def test_duplicate_top_level_protected_loss_key_is_rejected(tmp_path: Path):
+    trace_path = tmp_path / "duplicate.json"
+    trace_path.write_text(
+        '{"scenario_id":"x","prompt":"p","tool_calls":[],"unprotected_loss":1,'
+        '"protected_loss":0,"protected_loss":0}',
+        encoding="utf-8",
+    )
+    with pytest.raises(TraceValidationError, match="duplicate JSON key.*protected_loss"):
+        load_trace(trace_path)
+
+
+@pytest.mark.parametrize(
+    ("status", "violated_policy", "message"),
+    [
+        ("BLOCKED", None, "BLOCKED requires a non-empty string"),
+        ("ALLOWED", "some_policy", "ALLOWED requires null"),
+    ],
+)
+def test_policy_result_fields_must_match_status(status: str, violated_policy: str | None, message: str):
+    trace = load_trace(FIXTURES / "micro_refund_split_01.json")
+    trace["tool_calls"][0]["policy_result"] = {
+        "status": status,
+        "violated_policy": violated_policy,
+    }
+    with pytest.raises(TraceValidationError, match=message):
+        replay_trace(trace)
+
+
+@pytest.mark.parametrize("field", ["unprotected_loss", "protected_loss"])
+@pytest.mark.parametrize("value", [-1, -0.01])
+def test_negative_loss_values_are_rejected(field: str, value: int | float):
+    trace = load_trace(FIXTURES / "equal_losses.json")
+    trace[field] = value
+    with pytest.raises(TraceValidationError, match=f"{field}.*non-negative"):
+        calculate_damage_delta(trace)
+
+
+def test_cli_oversized_integer_parser_error_is_concise(tmp_path: Path, capsys):
+    trace_path = tmp_path / "oversized_integer.json"
+    trace_path.write_text(
+        '{"scenario_id":"x","prompt":"p","tool_calls":[],"unprotected_loss":'
+        + "9" * 5000
+        + ',"protected_loss":0}',
+        encoding="utf-8",
+    )
+    code = main(["analyze", str(trace_path)])
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "invalid or excessively complex JSON" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_cli_deeply_nested_json_parser_error_is_concise(tmp_path: Path, capsys):
+    trace_path = tmp_path / "deeply_nested.json"
+    trace_path.write_text(
+        '{"scenario_id":"x","prompt":"p","tool_calls":[],"unprotected_loss":0,'
+        '"protected_loss":0,"nested":' + "[" * 2000 + "0" + "]" * 2000 + "}",
+        encoding="utf-8",
+    )
+    code = main(["analyze", str(trace_path)])
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "invalid JSON" in captured.err or "excessively complex JSON" in captured.err
+    assert "Traceback" not in captured.err
+
+
+@pytest.mark.parametrize(
+    ("status", "violated_policy", "message"),
+    [
+        (1, None, "status: expected 'ALLOWED' or 'BLOCKED'"),
+        ("BLOCKED", True, "BLOCKED requires a non-empty string"),
+    ],
+)
+def test_policy_result_types_are_validated(status, violated_policy, message: str):
+    trace = load_trace(FIXTURES / "micro_refund_split_01.json")
+    trace["tool_calls"][0]["policy_result"] = {
+        "status": status,
+        "violated_policy": violated_policy,
+    }
+    with pytest.raises(TraceValidationError, match=message):
+        replay_trace(trace)
+
+
+@pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
+def test_non_finite_json_losses_are_rejected(tmp_path: Path, literal: str):
+    trace_path = tmp_path / "non_finite.json"
+    trace_path.write_text(
+        '{"scenario_id":"x","prompt":"p","tool_calls":[],"unprotected_loss":'
+        + literal
+        + ',"protected_loss":0}',
+        encoding="utf-8",
+    )
+    with pytest.raises(TraceValidationError):
+        load_trace(trace_path)

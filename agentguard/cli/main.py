@@ -7,7 +7,9 @@ import sys
 from pathlib import Path
 from typing import Sequence, TextIO
 
-from agentguard.analytics import TraceValidationError, calculate_damage_delta, load_trace, replay_trace
+from agentguard.analytics import TraceValidationError, load_trace
+from agentguard.analytics.damage import _calculate_validated_damage_delta
+from agentguard.analytics.replay import _replay_validated_trace
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -28,11 +30,14 @@ def _parser() -> argparse.ArgumentParser:
 def _report(command: str, trace_path: Path) -> dict:
     trace = load_trace(trace_path)
     if command == "replay":
-        result = {"replay": replay_trace(trace)}
+        result = {"replay": _replay_validated_trace(trace)}
     elif command == "analyze":
-        result = {"analytics": calculate_damage_delta(trace)}
+        result = {"analytics": _calculate_validated_damage_delta(trace)}
     else:
-        result = {"replay": replay_trace(trace), "analytics": calculate_damage_delta(trace)}
+        result = {
+            "replay": _replay_validated_trace(trace),
+            "analytics": _calculate_validated_damage_delta(trace),
+        }
     return {"command": command, **result}
 
 

@@ -7,14 +7,7 @@ from typing import Any
 from .trace import load_trace, validate_trace
 
 
-def replay_trace(trace: dict[str, Any] | str | Path) -> dict[str, Any]:
-    """Replay the ordered calls and recorded policy decisions from a trace.
-
-    This reproduces the trace's recorded decision sequence. It deliberately
-    does not call tools or recompute policies: the frozen trace has no backend
-    state or policy configuration with which to do so safely.
-    """
-    data = load_trace(trace) if isinstance(trace, (str, Path)) else validate_trace(trace)
+def _replay_validated_trace(data: dict[str, Any]) -> dict[str, Any]:
     calls = []
     allowed = blocked = 0
     for index, call in enumerate(data["tool_calls"], start=1):
@@ -34,3 +27,14 @@ def replay_trace(trace: dict[str, Any] | str | Path) -> dict[str, Any]:
         "replayed_calls": calls,
         "summary": {"total": len(calls), "allowed": allowed, "blocked": blocked},
     }
+
+
+def replay_trace(trace: dict[str, Any] | str | Path) -> dict[str, Any]:
+    """Replay the ordered calls and recorded policy decisions from a trace.
+
+    This reproduces the trace's recorded decision sequence. It deliberately
+    does not call tools or recompute policies: the frozen trace has no backend
+    state or policy configuration with which to do so safely.
+    """
+    data = load_trace(trace) if isinstance(trace, (str, Path)) else validate_trace(trace)
+    return _replay_validated_trace(data)
