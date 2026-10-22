@@ -14,8 +14,13 @@ def test_loads_stripe_policies_in_order():
     assert [r.name for r in rules] == [
         "max_single_refund", "max_daily_refund_cap",
         "refund_requires_reason", "no_refund_after_30_days",
+        "max_discount_20pct",
     ]
-    assert all("issue_refund" in r.applies_to for r in rules)
+    # Refund rules apply to issue_refund; discount rule applies to apply_discount.
+    refund_rules = [r for r in rules if r.name != "max_discount_20pct"]
+    assert all("issue_refund" in r.applies_to for r in refund_rules)
+    discount_rule = next(r for r in rules if r.name == "max_discount_20pct")
+    assert "apply_discount" in discount_rule.applies_to
 
 
 def test_missing_file_raises(tmp_path):

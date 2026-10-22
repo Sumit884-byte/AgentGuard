@@ -70,6 +70,14 @@ def test_single_refund_over_cap_blocked(engine):
     assert r.violated_policy == "max_single_refund"
 
 
+def test_negative_amount_blocked(engine):
+    """$0 < amount <= 50 — negatives must be rejected at YAML layer."""
+    state = SessionState()
+    r = engine.evaluate(_refund("s1", "ch_A", -1000.00), state)
+    assert r.status == "BLOCKED"
+    assert r.violated_policy == "max_single_refund"
+
+
 def test_refund_requires_reason(engine):
     state = SessionState()
     r = engine.evaluate(_refund("s1", "ch_A", 10.00, reason=""), state)
@@ -110,9 +118,11 @@ def test_different_charges_do_not_share_cumulative(engine):
     assert r2.status == "ALLOWED"   # separate charges, separate buckets
 
 
-def test_different_sessions_are_isolated(engine):
+def test_sessions_do_not_partition_cumulative_state(engine):
+    """SECURITY: changing session_id must NOT reset cumulative state."""
     state = SessionState()
-    engine.evaluate(_refund("sess_1", "ch_A", 40.00), state)
-    # New session — state resets.
-    r = engine.evaluate(_refund("sess_2", "ch_A", 40.00), state)
-    assert r.status == "ALLOWED"
+    r1 = engine.evaluate(_refund("sess_1", "ch_A", 40.00), state)
+    r2 = engine.evaluate(_refund("sess_2", "ch_A", 40.00), state)
+    assert r1.status == "ALLOWED"
+    assert r2.status == "BLOCKED"
+    assert r2.violated_policy == "max_daily_refund_cap"

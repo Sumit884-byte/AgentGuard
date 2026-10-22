@@ -2,9 +2,6 @@
 
 Run over stdio:
     python -m agentguard.mcp.server
-
-For stdio servers, never write to stdout — it corrupts JSON-RPC.
-All logging goes to stderr via the logging module.
 """
 from __future__ import annotations
 
@@ -27,11 +24,9 @@ handler = BillingHandler()
 
 
 def _call(tool: str, arguments: dict, session_id: str) -> dict:
-    """Shared wrapper: run handler, raise MCP ToolError on policy block."""
     try:
         return handler.handle(tool, arguments, session_id)
     except ToolBlocked as exc:
-        # Raising makes is_error=True for the MCP client.
         from mcp.server.fastmcp.exceptions import ToolError
         raise ToolError(str(exc)) from exc
 
@@ -39,19 +34,19 @@ def _call(tool: str, arguments: dict, session_id: str) -> dict:
 @mcp.tool()
 def issue_refund(
     session_id: str,
+    actor_id: str,
     charge_id: str,
     amount: float,
     reason: str,
-    days_since_charge: int = 0,
 ) -> dict:
-    """Issue a refund. Blocked if policy violation (cap, window, or reason)."""
+    """Issue a refund. Blocked if policy violation (cap, cumulative, window, reason)."""
     return _call(
         "issue_refund",
         {
             "charge_id": charge_id,
             "amount": amount,
             "reason": reason,
-            "days_since_charge": days_since_charge,
+            "actor_id": actor_id,
         },
         session_id,
     )
@@ -60,31 +55,31 @@ def issue_refund(
 @mcp.tool()
 def get_subscription(session_id: str, customer_id: str) -> dict:
     """Look up a customer's subscription (read-only; never blocked)."""
-    return _call(
-        "get_subscription",
-        {"customer_id": customer_id},
-        session_id,
-    )
+    return _call("get_subscription", {"customer_id": customer_id}, session_id)
 
 
 @mcp.tool()
 def apply_discount(
-    session_id: str, subscription_id: str, percent: float
+    session_id: str, actor_id: str, subscription_id: str, percent: float
 ) -> dict:
     """Apply a discount. Blocked if percent exceeds policy or already used."""
     return _call(
         "apply_discount",
-        {"subscription_id": subscription_id, "percent": percent},
+        {
+            "subscription_id": subscription_id,
+            "percent": percent,
+            "actor_id": actor_id,
+        },
         session_id,
     )
 
 
 @mcp.tool()
-def cancel_subscription(session_id: str, subscription_id: str) -> dict:
+def cancel_subscription(session_id: str, actor_id: str, subscription_id: str) -> dict:
     """Cancel a subscription. Blocked if not owned by the acting customer."""
     return _call(
         "cancel_subscription",
-        {"subscription_id": subscription_id},
+        {"subscription_id": subscription_id, "actor_id": actor_id},
         session_id,
     )
 
