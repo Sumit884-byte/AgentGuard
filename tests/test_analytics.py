@@ -179,14 +179,18 @@ def test_cli_oversized_integer_parser_error_is_concise(tmp_path: Path, capsys):
 def test_cli_deeply_nested_json_parser_error_is_concise(tmp_path: Path, capsys):
     trace_path = tmp_path / "deeply_nested.json"
     trace_path.write_text(
-        '{"scenario_id":"x","prompt":"p","tool_calls":[],"unprotected_loss":0,'
-        '"protected_loss":0,"nested":' + "[" * 2000 + "0" + "]" * 2000 + "}",
+        '{"scenario_id":"x","prompt":"p","tool_calls":[{"tool":"inspect",'
+        '"args":{"nested":' + "[" * 2000 + "0" + "]" * 2000 + '},'
+        '"policy_result":{"status":"ALLOWED","violated_policy":null}}],'
+        '"unprotected_loss":0,"protected_loss":0}',
         encoding="utf-8",
     )
     code = main(["analyze", str(trace_path)])
     captured = capsys.readouterr()
     assert code == 1
-    assert "invalid JSON" in captured.err or "excessively complex JSON" in captured.err
+    assert any(message in captured.err for message in (
+        "invalid JSON", "excessively complex JSON", "nesting exceeds the supported depth"
+    ))
     assert "Traceback" not in captured.err
 
 
