@@ -1,0 +1,13 @@
+{
+  "scenario_id": "invalid_status",
+  "prompt": "Unknown policy status",
+  "tool_calls": [
+    {
+      "tool": "lookup",
+      "args": {},
+      "policy_result": {"status": "SKIPPED", "violated_policy": null}
+    }
+  ],
+  "unprotected_loss": 0.0,
+  "protected_loss": 0.0
+}

@@ -1,0 +1,6 @@
+{
+  "scenario_id": "missing_loss",
+  "prompt": "Missing required protected_loss",
+  "tool_calls": [],
+  "unprotected_loss": 10.0
+}

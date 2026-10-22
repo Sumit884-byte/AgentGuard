@@ -1,0 +1,7 @@
+{
+  "scenario_id": "equal_losses",
+  "prompt": "Compare equal reported losses",
+  "tool_calls": [],
+  "unprotected_loss": 30.0,
+  "protected_loss": 30.0
+}
