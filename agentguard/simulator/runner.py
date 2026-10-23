@@ -5,15 +5,17 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 
 from .agent import SupportAgent
-from .contracts import BillingBackend, PolicyEngine
+from .contracts import BillingBackend
 from .llm import LLMClient
 from .records import AgentMode, ScenarioRun
 from .scenarios import SCENARIOS, Scenario
 from .tools import ToolExecutor
 
-# Builds a fresh backend loaded with ``scenario.seed``. Called once per run so
-# naive and guarded runs never share state.
-BackendFactory = Callable[[Scenario], BillingBackend]
+# Builds a fresh backend for one run: loaded from ``scenario.seed``, acting as
+# ``scenario.authenticated_customer_id``, enforcing policies only when mode is
+# "guarded". Called once per run so runs never share state. Person A's
+# ``make_backend`` (agentguard/integration/backend.py) has this signature.
+BackendFactory = Callable[[Scenario, AgentMode], BillingBackend]
 
 
 def run_scenario(
@@ -21,17 +23,12 @@ def run_scenario(
     mode: AgentMode,
     backend_factory: BackendFactory,
     llm: LLMClient,
-    policy_engine: PolicyEngine | None = None,
 ) -> ScenarioRun:
-    if mode == "guarded" and policy_engine is None:
-        raise ValueError("guarded mode requires a policy_engine")
+    if mode not in ("naive", "guarded"):
+        raise ValueError(f"mode must be 'naive' or 'guarded', got {mode!r}")
 
-    backend = backend_factory(scenario)
-    context = {
-        "authenticated_customer_id": scenario.authenticated_customer_id,
-        "scenario_id": scenario.id,
-    }
-    executor = ToolExecutor(backend, context, policy_engine if mode == "guarded" else None)
+    backend = backend_factory(scenario, mode)
+    executor = ToolExecutor(backend)
     agent = SupportAgent(llm=llm, executor=executor, customer_id=scenario.authenticated_customer_id)
 
     run = ScenarioRun(
@@ -64,13 +61,12 @@ def run_suite(
     mode: AgentMode,
     backend_factory: BackendFactory,
     llm: LLMClient,
-    policy_engine: PolicyEngine | None = None,
     scenarios: Iterable[Scenario] = SCENARIOS,
     on_complete: Callable[[ScenarioRun], None] | None = None,
 ) -> list[ScenarioRun]:
     runs = []
     for scenario in scenarios:
-        run = run_scenario(scenario, mode, backend_factory, llm, policy_engine)
+        run = run_scenario(scenario, mode, backend_factory, llm)
         runs.append(run)
         if on_complete:
             on_complete(run)

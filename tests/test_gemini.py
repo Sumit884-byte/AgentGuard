@@ -2,7 +2,7 @@ from google.genai import types
 
 from agentguard.simulator import GeminiLLM, get_scenario, run_scenario
 
-from .fakes import CapPolicy, backend_factory
+from .fakes import backend_factory
 
 
 def _response(*parts, finish="STOP"):
@@ -40,7 +40,7 @@ def test_gemini_tool_loop_translates_and_keeps_thought_signatures():
         ]
     )
     llm = GeminiLLM(model="gemini-test", client=client)
-    run = run_scenario(get_scenario("S1"), "guarded", backend_factory, llm, CapPolicy())
+    run = run_scenario(get_scenario("S1"), "guarded", backend_factory, llm)
 
     assert run.status == "completed"
     assert run.blocked_calls[0].tool_name == "apply_discount"
@@ -52,7 +52,7 @@ def test_gemini_tool_loop_translates_and_keeps_thought_signatures():
     response = tool_turn.parts[0].function_response
     assert response.name == "apply_discount"
     assert response.id == "id_apply_discount"
-    assert "blocked by billing policy" in response.response["error"]
+    assert response.response["error"].startswith("Blocked by billing policy: Discounts are capped at 20%.")
 
 
 def test_gemini_safety_block_maps_to_refusal():
