@@ -126,3 +126,13 @@ def test_sessions_do_not_partition_cumulative_state(engine):
     assert r1.status == "ALLOWED"
     assert r2.status == "BLOCKED"
     assert r2.violated_policy == "max_daily_refund_cap"
+
+
+def test_snapshot_includes_plans_with_prices():
+    """Shubhi's exporter needs plan prices in the snapshot."""
+    from agentguard.backend.seed import build_store
+    store = build_store()
+    snap = store.snapshot()
+    assert "plans" in snap
+    assert "PLAN-PRO" in snap["plans"]
+    assert snap["plans"]["PLAN-PRO"]["monthly_price"] == 29.99
