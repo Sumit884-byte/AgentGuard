@@ -171,7 +171,11 @@ export default function App() {
         </Select>
         <div className="ml-auto flex items-center gap-2">
           {meta.model && <Badge variant="secondary" className="font-mono">{meta.model}</Badge>}
-          {meta.backend && <Badge variant="outline" className="font-mono">{meta.backend.split(":").pop()}</Badge>}
+          {meta.backend && (
+            <Badge variant="outline" className="font-mono">
+              {/^[\w.]+:\w+$/.test(meta.backend) ? meta.backend.split(":")[0].split(".").pop() : meta.backend}
+            </Badge>
+          )}
         </div>
       </header>
 
