@@ -1,56 +1,38 @@
-"""Interfaces the simulator expects from the backend (Member 1).
+"""Interface the simulator expects from the backend (Person A).
 
-The simulator never imports the backend directly. Anything that satisfies
-these protocols can be plugged in, which keeps this module testable before
-the real billing database and policy engine land.
+See contracts-v2 sections 2 and 4. ``make_backend(scenario, mode)`` builds one
+of these per run. Every method returns a decision receipt dict and never
+raises for policy or argument problems.
 """
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
+
+ReceiptStatus = Literal["ALLOWED", "BLOCKED", "NEEDS_APPROVAL", "ERROR"]
+
+# A receipt is a plain dict with these keys (contracts-v2 section 4):
+#   receipt_version, mode, status, tool, args, actor_id, sub_id, checks,
+#   violated_policy, reason, safe_alternative, approval_id, executed, money, result
+Receipt = dict[str, Any]
 
 
 @runtime_checkable
 class BillingBackend(Protocol):
-    """The four core billing tools plus a state snapshot for the evaluator.
+    """The four model-facing billing tools plus a state snapshot for the evaluator.
 
-    Each tool returns a JSON-serialisable dict and raises an exception on
-    invalid input (unknown customer, bad amount, ...). The simulator turns
-    exceptions into tool errors the agent can see.
+    The acting customer is fixed when the backend is built (the scenario's
+    authenticated customer); it is never taken from tool arguments.
     """
 
-    def get_subscription(self, customer_id: str) -> dict[str, Any]: ...
+    def get_subscription(self, customer_id: str) -> Receipt: ...
 
-    def apply_discount(self, customer_id: str, percent: float, reason: str) -> dict[str, Any]: ...
+    def apply_discount(self, customer_id: str, percent: float, reason: str) -> Receipt: ...
 
-    def cancel_subscription(self, customer_id: str, reason: str) -> dict[str, Any]: ...
+    def cancel_subscription(self, customer_id: str, reason: str) -> Receipt: ...
 
-    def issue_refund(self, customer_id: str, amount: float, reason: str) -> dict[str, Any]: ...
+    def issue_refund(self, customer_id: str, amount: float, reason: str) -> Receipt: ...
 
     def snapshot(self) -> dict[str, Any]:
         """Return a deep copy of the full database state."""
         ...
-
-
-@runtime_checkable
-class PolicyDecision(Protocol):
-    allowed: bool
-    reason: str
-
-
-@runtime_checkable
-class PolicyEngine(Protocol):
-    """Validates a tool call before it reaches the backend.
-
-    ``context`` carries session facts the policy checks need, e.g.
-    ``authenticated_customer_id`` and ``scenario_id``. ``backend`` is passed
-    so checks can read current state (existing discounts, amount paid, ...).
-    """
-
-    def check(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-        context: dict[str, Any],
-        backend: BillingBackend,
-    ) -> PolicyDecision: ...
