@@ -1,7 +1,7 @@
 """Live test against a real LLM (Gemini or Claude). Opt-in: run with ``pytest -m live``.
 
-Reads GEMINI_API_KEY or ANTHROPIC_API_KEY from the environment or from ``.env``
-in the repo root. Set AGENTGUARD_PROVIDER to force one.
+Reads Bedrock (AWS), Anthropic or Gemini credentials from the environment or
+from ``.env`` in the repo root. Set AGENTGUARD_PROVIDER to force one.
 Uses the in-memory test backend, so only the LLM side is real.
 """
 
@@ -12,7 +12,7 @@ import pytest
 
 from agentguard.simulator import default_llm, get_scenario, run_scenario
 
-from .fakes import CapPolicy, backend_factory
+from .fakes import backend_factory
 
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
@@ -34,8 +34,18 @@ _load_dotenv()
 pytestmark = [
     pytest.mark.live,
     pytest.mark.skipif(
-        not any(os.environ.get(k) for k in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY")),
-        reason="no GEMINI_API_KEY or ANTHROPIC_API_KEY set",
+        not any(
+            os.environ.get(k)
+            for k in (
+                "GEMINI_API_KEY",
+                "GOOGLE_API_KEY",
+                "ANTHROPIC_API_KEY",
+                "AWS_ACCESS_KEY_ID",
+                "AWS_PROFILE",
+                "AWS_BEARER_TOKEN_BEDROCK",
+            )
+        ),
+        reason="no Bedrock, Anthropic or Gemini credentials set",
     ),
 ]
 
@@ -43,7 +53,7 @@ pytestmark = [
 @pytest.mark.parametrize("mode", ["naive", "guarded"])
 def test_s1_against_real_llm(mode):
     llm = default_llm()
-    run = run_scenario(get_scenario("S1"), mode, backend_factory, llm, CapPolicy() if mode == "guarded" else None)
+    run = run_scenario(get_scenario("S1"), mode, backend_factory, llm)
 
     print(f"\n[{mode} / {llm.model}] status={run.status}")
     for entry in run.transcript:

@@ -1,0 +1,69 @@
+import importlib.util
+import sys
+from pathlib import Path
+
+import pytest
+
+from .fakes import ScriptedLLM, backend_factory, text, tool
+
+spec = importlib.util.spec_from_file_location("web_server", Path(__file__).resolve().parent.parent / "web" / "server.py")
+web_server = importlib.util.module_from_spec(spec)
+sys.modules["web_server"] = web_server
+spec.loader.exec_module(web_server)
+
+
+class PerModeLLM:
+    """Gives each side its own script, chosen by which history it is called with."""
+
+    model = "scripted"
+
+    def __init__(self, naive, guarded):
+        self.scripts = {"naive": ScriptedLLM(naive), "guarded": ScriptedLLM(guarded)}
+        self.owner = {}
+
+    def create(self, system, tools, messages):
+        mode = self.owner[id(messages)]
+        return self.scripts[mode].create(system, tools, messages)
+
+
+def test_chat_runs_both_sides_and_returns_receipts():
+    attack = tool("apply_discount", customer_id="C-1001", percent=80, reason="retention")
+    llm = PerModeLLM(
+        naive=[attack, text("Done, 80% off.")],
+        guarded=[tool("apply_discount", customer_id="C-1001", percent=80, reason="retention"), text("I can do 20%.")],
+    )
+    demo = web_server.Demo(backend_factory, "tests.fakes:backend_factory", llm=llm)
+    started = demo.start("S1")
+    session = demo.sessions[started["session_id"]]
+    for mode, side in session.sides.items():
+        llm.owner[id(side.agent.messages)] = mode
+
+    out = demo.chat(started["session_id"], "Give me 80% off")
+
+    assert out["turn"] == 1
+    assert out["naive"]["text"] == "Done, 80% off."
+    assert out["naive"]["calls"][0]["receipt"]["status"] == "ALLOWED"
+    assert out["guarded"]["calls"][0]["receipt"]["status"] == "BLOCKED"
+    assert out["guarded"]["calls"][0]["receipt"]["safe_alternative"]["args"]["percent"] == 20
+    assert out["naive"]["state"]["customers"]["C-1001"]["discount_percent"] == 80
+    assert out["guarded"]["state"]["customers"]["C-1001"]["discount_percent"] == 0
+
+
+def test_chat_reports_llm_errors_per_side():
+    class Boom:
+        model = "boom"
+
+        def create(self, *a):
+            raise RuntimeError("quota")
+
+    demo = web_server.Demo(backend_factory, "x", llm=Boom())
+    sid = demo.start("S1")["session_id"]
+    out = demo.chat(sid, "hi")
+    assert out["naive"]["status"] == "error: RuntimeError: quota"
+    assert out["guarded"]["status"] == "error: RuntimeError: quota"
+
+
+def test_unknown_session_is_rejected():
+    demo = web_server.Demo(backend_factory, "x", llm=ScriptedLLM([]))
+    with pytest.raises(KeyError):
+        demo.chat("nope", "hi")

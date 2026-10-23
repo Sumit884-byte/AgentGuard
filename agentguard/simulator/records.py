@@ -19,13 +19,16 @@ class ToolCallRecord:
     tool_use_id: str
     tool_name: str
     arguments: dict[str, Any]
-    # False only when the policy engine blocked the call (guarded mode).
+    # False when the receipt status is BLOCKED or NEEDS_APPROVAL.
     allowed: bool
     # True when the backend method actually ran (and may have changed state).
     executed: bool
     result: dict[str, Any] | None = None
     error: str | None = None
+    # "<violated_policy>: <reason>" when blocked.
     policy_reason: str | None = None
+    # The full decision receipt from the backend (contracts-v2 section 4).
+    receipt: dict[str, Any] | None = None
 
 
 @dataclass

@@ -1,41 +1,32 @@
-# Simulator & Agent (Member 2)
+# Simulator & Agent (Person B)
 
 Runs the billing support agent against 8 scripted adversarial customers, in
-two modes, and records everything the evaluator needs.
+two modes, and records everything the evaluator needs. Follows
+`contracts-v2.md` sections 2 and 4.
 
-- **naive**: tool calls go straight to the backend.
-- **guarded**: every tool call goes through the policy engine first; blocked
-  calls are logged and returned to the agent as errors.
+- **naive**: the backend runs every call with policies off.
+- **guarded**: the backend checks ownership and every policy first.
 
-Both modes use the same prompt and model, so the guardrail is the only
-difference between them.
+Both modes use the same prompt, model, tools, seed and clock, so the
+policies are the only difference.
 
-## What the backend needs to provide (Member 1)
+## What the backend provides (Person A)
 
-See `contracts.py`. Duck typing is enough; no inheritance needed.
+`make_backend(scenario, mode)` (see `contracts.py`) returns an object with
+`get_subscription`, `apply_discount`, `cancel_subscription`, `issue_refund`
+and `snapshot`. Each tool method returns a decision receipt and never raises.
+The simulator maps receipts to records like this:
 
-```python
-class BillingBackend:
-    def get_subscription(self, customer_id) -> dict
-    def apply_discount(self, customer_id, percent, reason) -> dict
-    def cancel_subscription(self, customer_id, reason) -> dict
-    def issue_refund(self, customer_id, amount, reason) -> dict
-    def snapshot(self) -> dict          # deep copy of full DB state
+| receipt `status` | `allowed` | `executed` | `policy_reason` | `error` |
+|---|---|---|---|---|
+| ALLOWED | true | true | null | null |
+| BLOCKED / NEEDS_APPROVAL | false | false | `"<violated_policy>: <reason>"` | null |
+| ERROR | true | false | null | `reason` |
 
-class PolicyEngine:
-    def check(self, tool_name, arguments, context, backend) -> decision
-        # decision has .allowed: bool and .reason: str
-        # context = {"authenticated_customer_id": ..., "scenario_id": ...}
-```
+When a call is blocked, the model is told
+`"Blocked by billing policy: <reason> <safe_alternative.say>"`.
 
-Raise an exception for invalid input; the simulator records it and shows it
-to the agent as a tool error.
-
-Each scenario has a `seed` dict (customers that must exist). You supply a
-`backend_factory(scenario) -> BillingBackend` that builds a fresh database
-from it. It is called once per run.
-
-## How to run it (Shubhi)
+## How to run it (Person C)
 
 ```python
 from agentguard.simulator import default_llm, run_suite
@@ -44,16 +35,29 @@ from agentguard.simulator import default_llm, run_suite
 # Force one with AGENTGUARD_PROVIDER=gemini|anthropic. Models:
 # AGENTGUARD_GEMINI_MODEL (default gemini-3.8-flash), AGENTGUARD_MODEL (default claude-opus-5-5).
 llm = default_llm()
-naive = run_suite("naive", backend_factory, llm)
-guarded = run_suite("guarded", backend_factory, llm, policy_engine=engine)
+naive = run_suite("naive", make_backend, llm)
+guarded = run_suite("guarded", make_backend, llm)
 ```
 
 Each `ScenarioRun` has `initial_state`, `final_state`, `transcript`,
 `tool_calls` (each with `allowed`, `executed`, `result`, `error`,
-`policy_reason`), `targeted_policies` and `status`. `run.to_dict()` gives JSON.
+`policy_reason` and the full `receipt`), `targeted_policies` and `status`. `run.to_dict()` gives JSON.
 
 `status` is `completed`, `refusal`, `max_tool_iterations`, or `error: ...`.
 Partial artifacts are kept on error.
+
+## Saving runs (B4)
+
+```bash
+python -m agentguard.simulator            # 8 scenarios x naive + guarded, Person A's make_backend
+python -m agentguard.simulator --scenarios S1 S3 --modes guarded --run-id try1
+```
+
+Writes `runs/<run_id>/<scenario>.<mode>.json`, each the raw
+`ScenarioRun.to_dict()` (including `targeted_policies` and every record's
+`receipt`). Load them back with `load_run(path)` or `load_run_dir(run_dir)`,
+which returns `{(scenario_id, mode): ScenarioRun}`. The exporter writes
+`<scenario>.trace.json` next to them.
 
 ## Tests
 

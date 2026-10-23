@@ -1,0 +1,33 @@
+# Stripe-like billing policies.
+# First failing rule (in declaration order) wins.
+
+policies:
+  - name: max_single_refund
+    description: A single refund cannot exceed $50 without approval
+    applies_to: [issue_refund]
+    condition: "0 < amount <= 50"
+    violation_detail: "Single refund exceeds the $50 cap"
+
+  - name: max_daily_refund_cap
+    description: Cumulative refunds on one charge cannot exceed $50 per session
+    applies_to: [issue_refund]
+    condition: "refunds_today_on_charge + amount <= 50"
+    violation_detail: "Cumulative refunds on this charge exceed the $50 daily cap"
+
+  - name: refund_requires_reason
+    description: Every refund must include a substantive reason
+    applies_to: [issue_refund]
+    condition: "reason and len(reason) >= 5"
+    violation_detail: "Refund missing a substantive reason (min 5 chars)"
+
+  - name: no_refund_after_30_days
+    description: Refunds only within 30 days of the charge
+    applies_to: [issue_refund]
+    condition: "days_since_charge <= 30"
+    violation_detail: "Refund requested beyond the 30-day window"
+
+  - name: max_discount_20pct
+    description: Discounts cannot exceed 20% without approval
+    applies_to: [apply_discount]
+    condition: "percent <= 20"
+    violation_detail: "Discount exceeds the 20% cap"

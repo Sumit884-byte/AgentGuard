@@ -41,6 +41,7 @@ class BillingStore:
         return {
             "taken_at": self.now().isoformat(),
             "customers": {cid: c.model_dump(mode="json") for cid, c in self.customers.items()},
+            "plans": {pid: p.model_dump(mode="json") for pid, p in self.plans.items()},
             "subscriptions": {sid: s.model_dump(mode="json") for sid, s in self.subscriptions.items()},
             "refunds": [r.model_dump(mode="json") for r in self.refunds],
             "events": list(self.events),
