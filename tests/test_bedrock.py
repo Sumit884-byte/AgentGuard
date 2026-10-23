@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agentguard.simulator import BedrockLLM, GeminiLLM, AnthropicLLM, default_llm, get_scenario, run_scenario
+from agentguard.simulator import BedrockLLM, GeminiLLM, AnthropicLLM, OpenAICompatLLM, default_llm, get_scenario, run_scenario
 
 from .fakes import backend_factory
 
@@ -44,11 +44,13 @@ def test_bedrock_runs_tool_loop_with_bedrock_model_id():
         ({"AGENTGUARD_PROVIDER": "gemini", "GEMINI_API_KEY": "x"}, GeminiLLM),
         ({"ANTHROPIC_API_KEY": "x"}, AnthropicLLM),
         ({"GEMINI_API_KEY": "x"}, GeminiLLM),
+        ({"GROQ_API_KEY": "x"}, OpenAICompatLLM),
+        ({"AGENTGUARD_PROVIDER": "groq", "GROQ_API_KEY": "x"}, OpenAICompatLLM),
         ({}, BedrockLLM),
     ],
 )
 def test_default_llm_provider_selection(monkeypatch, env, expected):
-    for key in ("AGENTGUARD_PROVIDER", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
+    for key in ("AGENTGUARD_PROVIDER", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GROQ_API_KEY"):
         monkeypatch.delenv(key, raising=False)
     for key, value in env.items():
         monkeypatch.setenv(key, value)

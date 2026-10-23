@@ -11,6 +11,7 @@ from .llm import (
     GeminiLLM,
     LLMClient,
     LLMResponse,
+    OpenAICompatLLM,
     default_llm,
 )
 from .records import ScenarioRun, ToolCallRecord, TranscriptEntry
@@ -34,6 +35,7 @@ __all__ = [
     "GeminiLLM",
     "LLMClient",
     "LLMResponse",
+    "OpenAICompatLLM",
     "Receipt",
     "Scenario",
     "ScenarioRun",

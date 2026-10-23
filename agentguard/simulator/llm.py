@@ -11,6 +11,8 @@ from typing import Any, Protocol
 DEFAULT_MODEL = os.environ.get("AGENTGUARD_MODEL", "claude-opus-5-5")
 DEFAULT_GEMINI_MODEL = os.environ.get("AGENTGUARD_GEMINI_MODEL", "gemini-3.8-flash")
 DEFAULT_BEDROCK_MODEL = os.environ.get("AGENTGUARD_BEDROCK_MODEL", "anthropic.claude-opus-5-5")
+DEFAULT_GROQ_MODEL = os.environ.get("AGENTGUARD_GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 
 @dataclass
@@ -233,11 +235,87 @@ class GeminiLLM:
         return contents
 
 
+@dataclass
+class ChatBlock:
+    """Content block in the shape the agent loop reads (text or tool_use)."""
+
+    type: str
+    text: str = ""
+    id: str = ""
+    name: str = ""
+    input: dict[str, Any] = field(default_factory=dict)
+
+
+class OpenAICompatLLM:
+    """Any OpenAI-compatible chat endpoint with tool calling (Groq by default).
+
+    The agent keeps its history in Anthropic message format; this class
+    translates it to chat-completions messages on every call.
+    """
+
+    def __init__(self, model: str = DEFAULT_GROQ_MODEL, base_url: str = GROQ_BASE_URL,
+                 api_key: str | None = None, client: Any = None) -> None:
+        self.model = model
+        if client is None:
+            from openai import OpenAI
+
+            client = OpenAI(base_url=base_url, api_key=api_key or os.environ.get("GROQ_API_KEY"),
+                            max_retries=6, timeout=120)
+        self._client = client
+
+    def create(self, system: str, tools: list[dict[str, Any]], messages: list[dict[str, Any]]) -> LLMResponse:
+        response = self._client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "system", "content": system}, *self._to_chat(messages)],
+            tools=[{"type": "function", "function": {"name": t["name"], "description": t["description"],
+                                                     "parameters": t["input_schema"]}} for t in tools],
+            tool_choice="auto",
+        )
+        choice = response.choices[0]
+        message = choice.message
+        blocks: list[ChatBlock] = []
+        if message.content:
+            blocks.append(ChatBlock("text", text=message.content))
+        for call in message.tool_calls or []:
+            try:
+                arguments = json.loads(call.function.arguments or "{}")
+            except ValueError:
+                arguments = {}
+            blocks.append(ChatBlock("tool_use", id=call.id, name=call.function.name, input=arguments))
+        if any(b.type == "tool_use" for b in blocks):
+            stop_reason = "tool_use"
+        elif choice.finish_reason == "content_filter":
+            stop_reason = "refusal"
+        else:
+            stop_reason = "end_turn"
+        return LLMResponse(stop_reason=stop_reason, content=blocks)
+
+    @staticmethod
+    def _to_chat(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for message in messages:
+            content = message["content"]
+            if message["role"] == "assistant":
+                text = "".join(_field(b, "text") or "" for b in content if _field(b, "type") == "text")
+                calls = [{"id": _field(b, "id"), "type": "function",
+                          "function": {"name": _field(b, "name"), "arguments": json.dumps(_field(b, "input") or {})}}
+                         for b in content if _field(b, "type") == "tool_use"]
+                out.append({"role": "assistant", "content": text or None, **({"tool_calls": calls} if calls else {})})
+            elif isinstance(content, str):
+                out.append({"role": "user", "content": content})
+            else:
+                for block in content:
+                    if _field(block, "type") == "tool_result":
+                        out.append({"role": "tool", "tool_call_id": _field(block, "tool_use_id"),
+                                    "content": str(_field(block, "content"))})
+        return out
+
+
 def default_llm() -> LLMClient:
-    """Pick the provider from AGENTGUARD_PROVIDER (bedrock | anthropic | gemini).
+    """Pick the provider from AGENTGUARD_PROVIDER (bedrock | anthropic | gemini | groq).
 
     Without it: Anthropic if ANTHROPIC_API_KEY is set, else Gemini if a Gemini
-    key is set, else Bedrock (which uses AWS credentials).
+    key is set, else Groq if GROQ_API_KEY is set, else Bedrock (AWS credentials).
     """
     provider = os.environ.get("AGENTGUARD_PROVIDER", "").lower()
     if not provider:
@@ -245,6 +323,8 @@ def default_llm() -> LLMClient:
             provider = "anthropic"
         elif os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
             provider = "gemini"
+        elif os.environ.get("GROQ_API_KEY"):
+            provider = "groq"
         else:
             provider = "bedrock"
     if provider == "gemini":
@@ -253,4 +333,6 @@ def default_llm() -> LLMClient:
         return BedrockLLM()
     if provider == "anthropic":
         return AnthropicLLM()
-    raise ValueError(f"Unknown AGENTGUARD_PROVIDER {provider!r}; use bedrock, anthropic or gemini")
+    if provider == "groq":
+        return OpenAICompatLLM()
+    raise ValueError(f"Unknown AGENTGUARD_PROVIDER {provider!r}; use bedrock, anthropic, gemini or groq")

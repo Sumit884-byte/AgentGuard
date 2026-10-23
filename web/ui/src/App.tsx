@@ -97,7 +97,10 @@ export default function App() {
         addBlocked[m] = side.calls.filter((c) => ["BLOCKED", "NEEDS_APPROVAL"].includes(receiptStatus(c))).length
       }
       setEntries((prev) => ({ naive: [...prev.naive, ...add.naive], guarded: [...prev.guarded, ...add.guarded] }))
-      setGiven((p) => ({ naive: p.naive + addGiven.naive, guarded: p.guarded + addGiven.guarded }))
+      setGiven((p) => ({
+        naive: data.naive.loss ?? p.naive + addGiven.naive,
+        guarded: data.guarded.loss ?? p.guarded + addGiven.guarded,
+      }))
       setBlocked((p) => ({ naive: p.naive + addBlocked.naive, guarded: p.guarded + addBlocked.guarded }))
       say({ naive: data.naive.text, guarded: data.guarded.text })
     } catch (e) {
@@ -168,7 +171,11 @@ export default function App() {
         </Select>
         <div className="ml-auto flex items-center gap-2">
           {meta.model && <Badge variant="secondary" className="font-mono">{meta.model}</Badge>}
-          {meta.backend && <Badge variant="outline" className="font-mono">{meta.backend.split(":").pop()}</Badge>}
+          {meta.backend && (
+            <Badge variant="outline" className="font-mono">
+              {/^[\w.]+:\w+$/.test(meta.backend) ? meta.backend.split(":")[0].split(".").pop() : meta.backend}
+            </Badge>
+          )}
         </div>
       </header>
 

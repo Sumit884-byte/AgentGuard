@@ -97,3 +97,23 @@ def test_static_assets_cannot_escape_dist(tmp_path):
         assert conn.getresponse().status == 200
     finally:
         server.shutdown()
+
+
+def test_given_away_uses_state_loss_so_cancelled_discounts_count_zero():
+    from agentguard.integration import make_backend
+
+    llm = PerModeLLM(
+        naive=[tool("apply_discount", customer_id="C-1001", percent=80, reason="retention"), text("Done."),
+               tool("cancel_subscription", customer_id="C-1001", reason="asked"), text("Cancelled.")],
+        guarded=[text("No."), text("No.")],
+    )
+    demo = web_server.Demo(make_backend, "make_backend", llm=llm)
+    sid = demo.start("S1")["session_id"]
+    for mode, side in demo.sessions[sid].sides.items():
+        llm.owner[id(side.agent.messages)] = mode
+    assert demo.chat(sid, "80% off")["naive"]["loss"] == round(29.99 * 0.8 * 12, 2)
+    assert demo.chat(sid, "cancel then")["naive"]["loss"] == 0.0  # discount on a cancelled plan gives nothing away
+
+
+def test_loss_is_none_for_stand_in_backends():
+    assert web_server.session_loss({"customers": {}}, {"customers": {}}) is None
