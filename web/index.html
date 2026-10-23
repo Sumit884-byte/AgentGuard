@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentGuard Alexa+ Demo</title>
+<style>
+  :root {
+    --bg: #0b1220; --panel: #121b2e; --panel-2: #18233a; --line: #26324a;
+    --text: #e7ecf5; --muted: #8c99b3; --accent: #31c4f3;
+    --ok: #2fbf71; --bad: #f05454; --warn: #f2b33d; --err: #8c99b3;
+    --naive: #f05454; --guarded: #2fbf71;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px;
+           padding: 16px 20px; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 18px; margin: 0; letter-spacing: .2px; }
+  h1 span { color: var(--accent); }
+  .meta { color: var(--muted); font-size: 12px; }
+  select, button, input { font: inherit; color: var(--text); background: var(--panel-2);
+                          border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+  button { cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .spacer { flex: 1; }
+
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px 16px 8px; }
+  .ring { width: 92px; height: 92px; border-radius: 50%; border: none; padding: 0;
+          background: radial-gradient(circle at 50% 50%, #0e1a2e 55%, transparent 56%),
+                      conic-gradient(var(--accent), #1f6fff, var(--accent));
+          box-shadow: 0 0 0 0 rgba(49,196,243,.0); transition: box-shadow .2s; }
+  .ring.listening { animation: pulse 1.2s infinite; }
+  .ring.thinking { animation: spin 1.4s linear infinite; }
+  .ring svg { width: 34px; height: 34px; fill: var(--accent); }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(49,196,243,.55); } 100% { box-shadow: 0 0 0 22px rgba(49,196,243,0); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hint { color: var(--muted); font-size: 13px; min-height: 20px; text-align: center; }
+  .composer { display: flex; gap: 8px; width: min(760px, 100%); }
+  .composer input { flex: 1; min-width: 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 12px 20px 24px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 12px 16px 24px; } }
+  .col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+         display: flex; flex-direction: column; min-height: 420px; }
+  .col h2 { margin: 0; font-size: 15px; padding: 12px 14px; border-bottom: 1px solid var(--line);
+            display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .col.naive .dot { background: var(--naive); } .col.guarded .dot { background: var(--guarded); }
+  .tally { margin-left: auto; font-weight: 500; font-size: 12px; color: var(--muted); }
+  .tally b { color: var(--text); }
+  .log { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; max-height: 64vh; }
+  .bubble { padding: 9px 12px; border-radius: 12px; max-width: 92%; white-space: pre-wrap; word-wrap: break-word; }
+  .bubble.customer { align-self: flex-end; background: #1f3a5f; }
+  .bubble.agent { align-self: flex-start; background: var(--panel-2); }
+  .bubble.status { align-self: center; background: transparent; color: var(--warn); font-size: 12px; }
+
+  .card { border: 1px solid var(--line); border-left: 4px solid var(--err); border-radius: 8px;
+          padding: 8px 10px; background: #0f1828; font-size: 13px; }
+  .card.ALLOWED { border-left-color: var(--ok); }
+  .card.BLOCKED { border-left-color: var(--bad); }
+  .card.NEEDS_APPROVAL { border-left-color: var(--warn); }
+  .card .top { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline; }
+  .pill { font-size: 11px; font-weight: 700; letter-spacing: .4px; padding: 1px 7px; border-radius: 99px; color: #0b1220; background: var(--err); }
+  .ALLOWED .pill { background: var(--ok); } .BLOCKED .pill { background: var(--bad); } .NEEDS_APPROVAL .pill { background: var(--warn); }
+  .call { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text); word-break: break-word; }
+  .why { margin-top: 4px; color: var(--muted); }
+  .why b { color: var(--text); font-weight: 600; }
+  .alt { margin-top: 4px; color: var(--ok); }
+  details { margin-top: 4px; color: var(--muted); }
+  details li { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+  .empty { color: var(--muted); font-size: 13px; text-align: center; margin: auto; padding: 20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Alexa+ <span>billing</span> · AgentGuard</h1>
+  <label class="meta">Customer story
+    <select id="scenario"></select>
+  </label>
+  <label class="meta">Speak replies from
+    <select id="speak">
+      <option value="both">both agents</option>
+      <option value="guarded">guarded only</option>
+      <option value="naive">naive only</option>
+      <option value="off">off</option>
+    </select>
+  </label>
+  <span class="spacer"></span>
+  <span class="meta" id="meta"></span>
+</header>
+
+<section class="stage">
+  <button class="ring" id="mic" title="Hold a conversation by voice" aria-label="Talk">
+    <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
+  </button>
+  <div class="hint" id="hint">Tap the ring and speak, or type below.</div>
+  <form class="composer" id="form">
+    <input id="text" autocomplete="off" placeholder="Say something to the billing assistant…">
+    <button id="send">Send</button>
+  </form>
+  <div class="row">
+    <button id="next" type="button">Use next line from this story</button>
+    <button id="reset" type="button">Start over</button>
+  </div>
+</section>
+
+<main>
+  <section class="col naive">
+    <h2><span class="dot"></span>Naive agent <span class="meta">no guardrails</span>
+      <span class="tally" id="tally-naive"></span></h2>
+    <div class="log" id="log-naive"><div class="empty">Replies and decision receipts appear here.</div></div>
+  </section>
+  <section class="col guarded">
+    <h2><span class="dot"></span>Guarded agent <span class="meta">AgentGuard policies</span>
+      <span class="tally" id="tally-guarded"></span></h2>
+    <div class="log" id="log-guarded"><div class="empty">Replies and decision receipts appear here.</div></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const MODES = ["naive", "guarded"];
+let scenarios = [], sessionId = null, nextLine = 0, busy = false;
+let given = { naive: 0, guarded: 0 }, blocked = { naive: 0, guarded: 0 };
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const money = (n) => "$" + Number(n || 0).toFixed(2);
+const fmtArgs = (a) => Object.entries(a || {}).map(([k, v]) => `${k}=${typeof v === "string" ? JSON.stringify(v) : v}`).join(", ");
+
+async function api(path, body) {
+  const res = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function add(mode, node) {
+  const log = $("log-" + mode);
+  log.querySelector(".empty")?.remove();
+  log.appendChild(node);
+  log.scrollTop = log.scrollHeight;
+}
+// Models sometimes answer in light markdown; show **bold** as bold and drop other markup.
+const plain = (t) => String(t ?? "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/(^|\n)\s*[-*]\s+/g, "$1• ").replace(/[*`]/g, "");
+const rich = (t) => esc(String(t ?? "").replace(/(^|\n)\s*[-*]\s+/g, "$1• "))
+  .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/[*`]/g, "");
+function bubble(mode, cls, text) {
+  const d = document.createElement("div");
+  d.className = "bubble " + cls;
+  d.innerHTML = rich(text);
+  add(mode, d);
+}
+function card(mode, call) {
+  const r = call.receipt || {};
+  const status = r.status || (call.error ? "ERROR" : call.executed ? "ALLOWED" : "BLOCKED");
+  const d = document.createElement("div");
+  d.className = "card " + status;
+  let html = `<div class="top"><span class="pill">${esc(status.replace("_", " "))}</span>
+    <span class="call">${esc(call.tool)}(${esc(fmtArgs(r.args || call.arguments))})</span></div>`;
+  if (status !== "ALLOWED") {
+    const rule = r.violated_policy ? `<b>${esc(r.violated_policy)}</b> · ` : "";
+    html += `<div class="why">${rule}${esc(r.reason || call.error || "")}</div>`;
+  }
+  if (r.safe_alternative) {
+    html += `<div class="alt">Safe alternative: ${esc(r.safe_alternative.say)} <span class="call">${esc(r.safe_alternative.tool)}(${esc(fmtArgs(r.safe_alternative.args))})</span></div>`;
+  }
+  if (r.approval_id) html += `<div class="why">Waiting for supervisor approval · ${esc(r.approval_id)}</div>`;
+  if (r.checks && r.checks.length) {
+    html += `<details><summary>${r.checks.length} checks</summary><ul>${r.checks.map((c) =>
+      `<li>${c.passed ? "✓" : "✗"} ${esc(c.rule)} <span>${esc(JSON.stringify(c.values || {}))}</span></li>`).join("")}</ul></details>`;
+  }
+  d.innerHTML = html;
+  add(mode, d);
+  if (r.money) given[mode] += (r.money.refund_usd || 0) + (r.money.discount_value_12m_usd || 0);
+  if (status === "BLOCKED" || status === "NEEDS_APPROVAL") blocked[mode] += 1;
+}
+function tallies() {
+  for (const m of MODES) $("tally-" + m).innerHTML = `given away <b>${money(given[m])}</b> · blocked <b>${blocked[m]}</b>`;
+}
+
+function speak(replies) {
+  if (!("speechSynthesis" in window)) return;
+  const which = $("speak").value;
+  if (which === "off") return;
+  speechSynthesis.cancel();
+  for (const m of MODES) {
+    if (which !== "both" && which !== m) continue;
+    if (!replies[m]) continue;
+    const prefix = which === "both" ? (m === "naive" ? "Naive agent: " : "Guarded agent: ") : "";
+    const u = new SpeechSynthesisUtterance(prefix + plain(replies[m]));
+    u.rate = 1.05;
+    speechSynthesis.speak(u);
+  }
+}
+
+function setBusy(on, hint) {
+  busy = on;
+  $("mic").classList.toggle("thinking", on);
+  for (const id of ["send", "next", "reset", "mic"]) $(id).disabled = on;
+  if (hint !== undefined) $("hint").textContent = hint;
+}
+
+async function startSession() {
+  const id = $("scenario").value;
+  const data = await api("/api/session", { scenario_id: id });
+  sessionId = data.session_id;
+  nextLine = 0;
+  given = { naive: 0, guarded: 0 }; blocked = { naive: 0, guarded: 0 };
+  for (const m of MODES) $("log-" + m).innerHTML = `<div class="empty">Signed in as ${esc(data.scenario.customer_id)}. Replies and decision receipts appear here.</div>`;
+  tallies();
+  $("hint").textContent = `${data.scenario.title}. Tap the ring and speak, or use the story's next line.`;
+}
+
+async function send(message) {
+  message = message.trim();
+  if (!message || busy) return;
+  if (!sessionId) await startSession();
+  for (const m of MODES) bubble(m, "customer", message);
+  $("text").value = "";
+  setBusy(true, "Both agents are thinking…");
+  try {
+    const data = await api("/api/chat", { session_id: sessionId, message });
+    const replies = {};
+    for (const m of MODES) {
+      const side = data[m];
+      for (const call of side.calls) card(m, call);
+      if (side.text) bubble(m, "agent", side.text);
+      if (side.status !== "completed") bubble(m, "status", side.status);
+      replies[m] = side.text;
+    }
+    tallies();
+    speak(replies);
+    setBusy(false, "Tap the ring and speak, or type below.");
+  } catch (e) {
+    setBusy(false, "Error: " + e.message);
+  }
+}
+
+// Voice input
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognizer = null;
+if (Recognition) {
+  recognizer = new Recognition();
+  recognizer.lang = "en-US";
+  recognizer.interimResults = true;
+  recognizer.onresult = (e) => {
+    const t = Array.from(e.results).map((r) => r[0].transcript).join("");
+    $("text").value = t;
+    if (e.results[e.results.length - 1].isFinal) send(t);
+  };
+  recognizer.onend = () => { $("mic").classList.remove("listening"); if (!busy) $("hint").textContent = "Tap the ring and speak, or type below."; };
+  recognizer.onerror = (e) => { $("hint").textContent = "Voice error: " + e.error + ". You can type instead."; };
+}
+$("mic").onclick = () => {
+  if (!recognizer) { $("hint").textContent = "Voice input isn't supported in this browser. Try Chrome, or type below."; return; }
+  if (busy) return;
+  speechSynthesis?.cancel();
+  $("mic").classList.add("listening");
+  $("hint").textContent = "Listening…";
+  recognizer.start();
+};
+
+$("form").onsubmit = (e) => { e.preventDefault(); send($("text").value); };
+$("next").onclick = () => {
+  const s = scenarios.find((x) => x.id === $("scenario").value);
+  if (!s) return;
+  if (nextLine >= s.messages.length) { $("hint").textContent = "That's the end of this story. Start over or pick another."; return; }
+  send(s.messages[nextLine++]);
+};
+$("reset").onclick = () => startSession().catch((e) => ($("hint").textContent = "Error: " + e.message));
+$("scenario").onchange = () => startSession().catch((e) => ($("hint").textContent = "Error: " + e.message));
+
+api("/api/scenarios").then((data) => {
+  scenarios = data.scenarios;
+  $("scenario").innerHTML = scenarios.map((s) => `<option value="${esc(s.id)}">${esc(s.id)} · ${esc(s.title)}</option>`).join("");
+  $("meta").textContent = `model ${data.model} · backend ${data.backend}`;
+  tallies();
+  return startSession();
+}).catch((e) => ($("hint").textContent = "Error: " + e.message));
+</script>
+</body>
+</html>

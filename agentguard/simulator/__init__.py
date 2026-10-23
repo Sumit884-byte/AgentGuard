@@ -1,7 +1,7 @@
 """Adversarial customer simulator and billing support agent (naive + guarded)."""
 
 from .agent import SYSTEM_PROMPT, SupportAgent
-from .contracts import BillingBackend, PolicyDecision, PolicyEngine
+from .contracts import BillingBackend, Receipt
 from .llm import (
     DEFAULT_BEDROCK_MODEL,
     DEFAULT_GEMINI_MODEL,
@@ -33,8 +33,7 @@ __all__ = [
     "GeminiLLM",
     "LLMClient",
     "LLMResponse",
-    "PolicyDecision",
-    "PolicyEngine",
+    "Receipt",
     "Scenario",
     "ScenarioRun",
     "SupportAgent",

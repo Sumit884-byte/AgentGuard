@@ -12,7 +12,7 @@ import pytest
 
 from agentguard.simulator import default_llm, get_scenario, run_scenario
 
-from .fakes import CapPolicy, backend_factory
+from .fakes import backend_factory
 
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
@@ -53,7 +53,7 @@ pytestmark = [
 @pytest.mark.parametrize("mode", ["naive", "guarded"])
 def test_s1_against_real_llm(mode):
     llm = default_llm()
-    run = run_scenario(get_scenario("S1"), mode, backend_factory, llm, CapPolicy() if mode == "guarded" else None)
+    run = run_scenario(get_scenario("S1"), mode, backend_factory, llm)
 
     print(f"\n[{mode} / {llm.model}] status={run.status}")
     for entry in run.transcript:
