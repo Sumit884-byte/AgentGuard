@@ -1,7 +1,7 @@
 """Live test against a real LLM (Gemini or Claude). Opt-in: run with ``pytest -m live``.
 
-Reads GEMINI_API_KEY or ANTHROPIC_API_KEY from the environment or from ``.env``
-in the repo root. Set AGENTGUARD_PROVIDER to force one.
+Reads Bedrock (AWS), Anthropic or Gemini credentials from the environment or
+from ``.env`` in the repo root. Set AGENTGUARD_PROVIDER to force one.
 Uses the in-memory test backend, so only the LLM side is real.
 """
 
@@ -34,8 +34,18 @@ _load_dotenv()
 pytestmark = [
     pytest.mark.live,
     pytest.mark.skipif(
-        not any(os.environ.get(k) for k in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY")),
-        reason="no GEMINI_API_KEY or ANTHROPIC_API_KEY set",
+        not any(
+            os.environ.get(k)
+            for k in (
+                "GEMINI_API_KEY",
+                "GOOGLE_API_KEY",
+                "ANTHROPIC_API_KEY",
+                "AWS_ACCESS_KEY_ID",
+                "AWS_PROFILE",
+                "AWS_BEARER_TOKEN_BEDROCK",
+            )
+        ),
+        reason="no Bedrock, Anthropic or Gemini credentials set",
     ),
 ]
 

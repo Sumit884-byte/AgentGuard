@@ -2,13 +2,24 @@
 
 from .agent import SYSTEM_PROMPT, SupportAgent
 from .contracts import BillingBackend, Receipt
-from .llm import DEFAULT_GEMINI_MODEL, DEFAULT_MODEL, AnthropicLLM, GeminiLLM, LLMClient, LLMResponse, default_llm
+from .llm import (
+    DEFAULT_BEDROCK_MODEL,
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_MODEL,
+    AnthropicLLM,
+    BedrockLLM,
+    GeminiLLM,
+    LLMClient,
+    LLMResponse,
+    default_llm,
+)
 from .records import ScenarioRun, ToolCallRecord, TranscriptEntry
 from .runner import BackendFactory, run_scenario, run_suite
 from .scenarios import SCENARIOS, SCENARIOS_BY_ID, Scenario, get_scenario
 from .tools import TOOL_SPECS, ToolExecutor
 
 __all__ = [
+    "DEFAULT_BEDROCK_MODEL",
     "DEFAULT_GEMINI_MODEL",
     "DEFAULT_MODEL",
     "SCENARIOS",
@@ -17,6 +28,7 @@ __all__ = [
     "TOOL_SPECS",
     "AnthropicLLM",
     "BackendFactory",
+    "BedrockLLM",
     "BillingBackend",
     "GeminiLLM",
     "LLMClient",

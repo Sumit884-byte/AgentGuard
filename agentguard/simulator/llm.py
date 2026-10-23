@@ -10,6 +10,7 @@ from typing import Any, Protocol
 
 DEFAULT_MODEL = os.environ.get("AGENTGUARD_MODEL", "claude-opus-5-5")
 DEFAULT_GEMINI_MODEL = os.environ.get("AGENTGUARD_GEMINI_MODEL", "gemini-3.8-flash")
+DEFAULT_BEDROCK_MODEL = os.environ.get("AGENTGUARD_BEDROCK_MODEL", "anthropic.claude-opus-5-5")
 
 
 @dataclass
@@ -50,6 +51,34 @@ class AnthropicLLM:
             output_config={"effort": self.effort},
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
+        )
+        return LLMResponse(stop_reason=response.stop_reason, content=list(response.content))
+
+
+class BedrockLLM:
+    """Claude on Amazon Bedrock via the Anthropic SDK's Bedrock (Mantle) client.
+
+    Credentials come from the standard AWS chain: AWS_ACCESS_KEY_ID /
+    AWS_SECRET_ACCESS_KEY, AWS_PROFILE, or AWS_BEARER_TOKEN_BEDROCK. The model
+    needs to be enabled in the Bedrock console for the account and region.
+    Server-side refusal fallbacks are not used here; a refusal ends the run
+    with status "refusal".
+    """
+
+    def __init__(self, model: str = DEFAULT_BEDROCK_MODEL, region: str | None = None, client: Any = None) -> None:
+        from anthropic import AnthropicBedrockMantle
+
+        self.model = model
+        self.region = region or os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-1"
+        self._client = client or AnthropicBedrockMantle(aws_region=self.region)
+
+    def create(self, system: str, tools: list[dict[str, Any]], messages: list[dict[str, Any]]) -> LLMResponse:
+        response = self._client.messages.create(
+            model=self.model,
+            max_tokens=16000,
+            system=system,
+            tools=[{**tool, "strict": True} for tool in tools],
+            messages=messages,
         )
         return LLMResponse(stop_reason=response.stop_reason, content=list(response.content))
 
@@ -205,9 +234,23 @@ class GeminiLLM:
 
 
 def default_llm() -> LLMClient:
-    """Pick the provider from AGENTGUARD_PROVIDER, else from whichever key is set."""
+    """Pick the provider from AGENTGUARD_PROVIDER (bedrock | anthropic | gemini).
+
+    Without it: Anthropic if ANTHROPIC_API_KEY is set, else Gemini if a Gemini
+    key is set, else Bedrock (which uses AWS credentials).
+    """
     provider = os.environ.get("AGENTGUARD_PROVIDER", "").lower()
     if not provider:
-        has_gemini = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        provider = "gemini" if has_gemini and not os.environ.get("ANTHROPIC_API_KEY") else "anthropic"
-    return GeminiLLM() if provider == "gemini" else AnthropicLLM()
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            provider = "anthropic"
+        elif os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+            provider = "gemini"
+        else:
+            provider = "bedrock"
+    if provider == "gemini":
+        return GeminiLLM()
+    if provider == "bedrock":
+        return BedrockLLM()
+    if provider == "anthropic":
+        return AnthropicLLM()
+    raise ValueError(f"Unknown AGENTGUARD_PROVIDER {provider!r}; use bedrock, anthropic or gemini")
