@@ -108,21 +108,30 @@ class ToolExecutor:
             record.error = f"{type(exc).__name__}: {exc}"
             return f"Error: {exc}", True
 
-        record.receipt = receipt
-        status = receipt.get("status")
-        reason = receipt.get("reason") or ""
+        return apply_receipt(record, receipt)
 
-        if status == "ALLOWED":
-            record.executed = True
-            record.result = receipt.get("result")
-            return json.dumps(record.result, default=str), False
 
-        if status in ("BLOCKED", "NEEDS_APPROVAL"):
-            record.allowed = False
-            record.policy_reason = f"{receipt.get('violated_policy')}: {reason}"
-            say = (receipt.get("safe_alternative") or {}).get("say") or ""
-            return f"Blocked by billing policy: {reason} {say}".strip(), True
+def apply_receipt(record: ToolCallRecord, receipt: dict[str, Any]) -> tuple[str, bool]:
+    """Fill ``record`` from a decision receipt (contracts-v2 section 2).
 
-        # ERROR, or an unknown status: treat as a failed call that did not run.
-        record.error = reason or f"Unexpected receipt status: {status!r}"
-        return f"Error: {record.error}", True
+    Returns ``(content_for_model, is_error)``. Shared by the in-process
+    executor and the Strands agent, so both record calls the same way.
+    """
+    record.receipt = receipt
+    status = receipt.get("status")
+    reason = receipt.get("reason") or ""
+
+    if status == "ALLOWED":
+        record.executed = True
+        record.result = receipt.get("result")
+        return json.dumps(record.result, default=str), False
+
+    if status in ("BLOCKED", "NEEDS_APPROVAL"):
+        record.allowed = False
+        record.policy_reason = f"{receipt.get('violated_policy')}: {reason}"
+        say = (receipt.get("safe_alternative") or {}).get("say") or ""
+        return f"Blocked by billing policy: {reason} {say}".strip(), True
+
+    # ERROR, or an unknown status: treat as a failed call that did not run.
+    record.error = reason or f"Unexpected receipt status: {status!r}"
+    return f"Error: {record.error}", True

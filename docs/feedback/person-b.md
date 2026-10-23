@@ -13,6 +13,24 @@ needs to be taken on trust.
 | One request dropped with `RemoteProtocolError: Server disconnected without sending a response`, and our first live run took 11 minutes before failing. | A single stuck call blocked the whole scenario. | Added our own retry with backoff for 5xx, 429 and dropped connections, and a 120-second request timeout. 400 errors are never retried. | Retries for 503/429 and a finite request timeout on by default in the SDK. |
 | Function calling on Gemini 3 needs each model turn's thought signatures sent back unchanged. Our agent keeps history in a provider-neutral format, so rebuilding the parts would have dropped them. | Easy to get wrong silently. | Keep the original response `Part` objects and replay them as-is. | A warning when a function-calling turn is replayed without its signature. |
 | `parameters_json_schema` accepted our strict JSON schemas (`additionalProperties: false`, `required`) unchanged. | Positive: the same tool definitions work for both providers. | None needed. | None. |
+| The free tier allows 20 requests per day per model (`gemini-3.6-flash`); a Strands run hit the limit mid-scenario, and the error said to retry in about 15 hours. | One scenario takes 3 to 10 requests, so the 16 recorded runs need a paid key or several models. | Ran the guarded checks on `gemini-3.5-flash-lite`, which has its own quota. | Show the remaining daily quota in the response headers. |
+
+## Strands Agents (agent as MCP client)
+
+| What happened | Impact | Workaround | Feature request |
+|---|---|---|---|
+| `MCPClient(url=..., headers=...)` connected to a Streamable HTTP server with a bearer token in one line. | Positive: identity stays in the transport, never in tool arguments. | None needed. | None. |
+| The same agent code ran on Gemini by swapping `BedrockModel` for `GeminiModel`. | Positive: we could test the whole MCP loop without AWS access. | None needed. | None. |
+| The vended `AgentSkills` plugin loaded our `SKILL.md`, and the agent activated the skill on its own on the first turn. | Positive: the Alexa+ Agent Skill works in a real agent. | None needed. | None. |
+| On a daily-quota error, each scenario still spent about 2 minutes in the default retries before failing. | An error that cannot succeed for hours still cost minutes per scenario. | None yet. | Do not retry errors that carry a long `retry-after`. |
+| Recording each tool call's input and result needed the `AfterToolCallEvent` hook; the MCP tool result arrives as text JSON plus a structured block. | Small amount of parsing code. | Read the structured block first, then the text. | None. |
+
+## MCP Python SDK 2.x
+
+| What happened | Impact | Workaround | Feature request |
+|---|---|---|---|
+| `mcp.server.fastmcp` is gone in 2.x (renamed `MCPServer`); the import error links straight to the migration guide. | Our v1 server stops importing once 2.x is installed (Person A's task A1). | Wrote the 2.x stub server with `MCPServer`, `token_verifier` + `AuthSettings`, `get_access_token()` and `custom_route`. | None: the error message was the best part. |
+| A token verifier requires `AuthSettings` with issuer and resource URLs even for a local demo with static tokens. | A little ceremony for local demos. | Point both URLs at the local server. | A simple static-token mode for local development. |
 
 ## Browser speech APIs (Alexa+ web page)
 
@@ -47,12 +65,9 @@ policy server, so they are observations, not results.
 
 ## Not used yet (fill in after first use)
 
-- **Amazon Bedrock:** the provider is written (via the Anthropic SDK's
-  Bedrock client) and tested offline, but no live call has been made: no
-  AWS credentials were available yet. Model access also has to be enabled
-  per account and region in the Bedrock console before the first call.
-- **Strands Agents:** not used. Cut per the plan's cut list (B3 stands in
-  for B2) because there were no AWS credentials and no HTTP MCP server yet.
-- **MCP Python SDK:** the agent calls the backend in-process (contract v2,
-  phase 1), so Person B has not used the MCP client side. Person A's server
-  notes (A8) cover the SDK.
+- **Amazon Bedrock:** no live call has been made: no AWS credentials were
+  available. Both Bedrock paths are written and tested without AWS: the
+  Anthropic SDK's Bedrock client against a mocked HTTP endpoint (signed
+  request to the regional endpoint), and Strands' `BedrockModel` for
+  configuration only. Model access also has to be enabled per account and
+  region in the Bedrock console before the first call.
