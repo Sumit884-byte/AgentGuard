@@ -54,8 +54,9 @@ python -m pytest            # offline test suite, no API keys needed
 cp .env.example .env        # then add a model key (see below)
 ```
 
-`.env` takes one provider: `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, or AWS
-credentials for Amazon Bedrock. `AGENTGUARD_PROVIDER` picks one explicitly.
+`.env` takes one provider: `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY`
+(OpenAI-compatible, `openai/gpt-oss-120b` by default), or AWS credentials for
+Amazon Bedrock. `AGENTGUARD_PROVIDER` picks one explicitly.
 Never put real keys in `.env.example`.
 
 ## Run it
