@@ -1,31 +1,36 @@
-# Trace replay and damage delta
+# Trace export, replay, analysis, and scoreboard
 
-The analytics package reads the frozen Execution Trace shape: `scenario_id`, `prompt`, `tool_calls`, `unprotected_loss`, and `protected_loss`. Each call has `tool`, `args`, and a `policy_result` with `status` (`ALLOWED` or `BLOCKED`) and `violated_policy` (a string or `null`). Required fields and JSON types are checked. Missing or unknown fields, duplicate object keys at any nesting level, malformed JSON, oversized integer tokens, excessive nesting, and invalid values produce a concise validation error; no defaults are filled in. A `BLOCKED` decision requires a non-empty `violated_policy`; an `ALLOWED` decision requires `null`. Losses must be finite, non-negative JSON numbers (booleans are rejected). Parser limits are reported as CLI input errors rather than tracebacks.
+## Frozen trace contract
 
-The supplied shape does not contain `schema_version`; the loader does not invent one. Any schema evolution should be agreed and versioned by the contract owners. Unknown fields are rejected so drift cannot pass silently.
+The strict loader uses the unversioned shape in `contracts.md`: `scenario_id`, `prompt`, `tool_calls`, `unprotected_loss`, and `protected_loss`. Each call has `tool`, `args`, and `policy_result` with `ALLOWED` or `BLOCKED` plus a nullable `violated_policy`. Missing/unknown fields, duplicate JSON keys, malformed input, invalid statuses, non-finite values, and negative input losses are rejected. No schema version or missing value is inferred.
 
-The simulator's `ScenarioRun.to_dict()` is not currently an Execution Trace adapter: `scenario_id` is available, but its `tool_calls` use `tool_name`, `arguments`, `allowed`, and `policy_reason` instead of the frozen call fields; it has no top-level `prompt`, `unprotected_loss`, or `protected_loss`. Loss values are not present in the run record or derivable authoritatively from it. Integration therefore remains blocked until the contract owners identify an authoritative prompt source/mapping and loss producer, and approve mappings for policy status and violated policy.
+## Export paired simulator runs
 
-Replay is deterministic and side-effect free. It returns the calls in source order with their recorded policy decisions. It does not execute tools or rerun policies because the trace carries neither backend state nor policy configuration.
+`export_trace(scenario, naive_run, guarded_run)` requires matching scenario IDs and the expected naive/guarded modes, with each run completed or a refusal. It joins customer messages with two newline characters and reads guarded tool calls from their full Contract v2 receipt objects.
 
-The damage delta is defined as:
+Loss is computed from each run's initial and final snapshots: newly issued refunds plus the value over 12 months of increases to an existing or newly applied discount. The exporter rejects malformed or incomplete state rather than supplying zero. It does not calculate hypothetical loss for a blocked call. `write_trace` validates before writing.
 
-```text
-damage_delta = unprotected_loss - protected_loss
-```
+The frozen trace keeps only ALLOWED or BLOCKED. The exporter reads each guarded call's Contract v2 receipt: ALLOWED remains ALLOWED, while BLOCKED, NEEDS_APPROVAL, and ERROR map to BLOCKED with the receipt's policy or error code. The trace does not carry the full receipt or execution metadata.
 
-A positive result means the trace reports a lower loss value for the protected case by that difference; a negative result means the protected value is higher; zero means they are equal. The CLI reports only this arithmetic comparison and does not infer currency, realized savings, or causality.
-
-## CLI
-
-After installing the package, use:
+## Replay and analyze
 
 ```sh
 agentguard replay trace.json [--format json|text] [--output report.json]
 agentguard analyze trace.json [--format json|text] [--output report.json]
+agentguard analyze runs/ [--format json|text] [--output aggregate.json]
 agentguard run trace.json [--format json|text] [--output report.json]
 ```
 
-Output is JSON by default. `replay` reports the ordered recorded calls and counts; `analyze` reports the two input losses, formula, signed delta, and interpretation; `run` returns both reports. Exit codes are `0` for success, `1` for file/JSON/schema/output errors (including parser limits and unrepresentable delta arithmetic), and `2` for invalid command-line usage. The composite action emits a GitHub Actions error annotation on failure and preserves the CLI exit code.
+Replay is deterministic and side-effect free; it does not call tools or recompute policy decisions. Damage delta is `unprotected_loss - protected_loss`; positive, zero, and negative values are retained and labeled honestly.
 
-The composite GitHub Action at `.github/actions/agentguard-trace` accepts `trace`, `command` (`replay`, `analyze`, or `run`), and `python-version` inputs. It writes a JSON report and exposes its path as the `report-path` output. The workflow runs on pushes and pull requests, tests Python 3.10 through 3.13, then exercises the composite Action against the contract fixture.
+## Eight-scenario scoreboard
+
+```sh
+agentguard scoreboard runs/ --output reports/damage-scoreboard.html
+```
+
+The page reads each exported `<scenario>.trace.json` together with its naive and guarded raw run files in the same directory. Loss comes from the validated trace; `unauthorized_actions` counts executed receipt calls whose subscription owner differs from the authenticated customer. Missing or invalid traces or receipts are shown and excluded, and an incomplete scoreboard returns exit code 1.
+
+## GitHub Action
+
+`.github/actions/agentguard-trace` accepts `trace`, `command` (`replay`, `analyze`, or `run`), and `python-version`. It writes a JSON report and exposes `report-path`. `.github/workflows/tests.yml` runs the offline test suite across Python 3.10–3.13, invokes the action on the `micro_refund_split_01.json` contract fixture, and checks the report path, command, and damage delta.

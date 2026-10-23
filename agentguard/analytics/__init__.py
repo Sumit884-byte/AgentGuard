@@ -2,6 +2,7 @@
 from .damage import calculate_damage_delta
 from .export import calculate_state_loss, export_trace, export_trace_from_run_dir, write_trace
 from .replay import replay_trace
+from .scoreboard import render_scoreboard, scoreboard_report, write_scoreboard
 from .trace import TraceValidationError, load_trace, validate_trace
 
-__all__ = ["TraceValidationError", "calculate_damage_delta", "calculate_state_loss", "export_trace", "export_trace_from_run_dir", "load_trace", "replay_trace", "validate_trace", "write_trace"]
+__all__ = ["TraceValidationError", "calculate_damage_delta", "calculate_state_loss", "export_trace", "export_trace_from_run_dir", "load_trace", "render_scoreboard", "replay_trace", "scoreboard_report", "validate_trace", "write_scoreboard", "write_trace"]
