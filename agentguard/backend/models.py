@@ -34,6 +34,9 @@ class Subscription(BaseModel):
     started_at: datetime
     cancelled_at: datetime | None = None
     discount_percent: float = 0.0
+    # Latest charge (contract v2 section 5); the refund window is measured from it.
+    last_charged_at: datetime | None = None
+    last_charge_amount: float | None = None
 
 
 class Refund(BaseModel):

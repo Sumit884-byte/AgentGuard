@@ -156,3 +156,28 @@ def test_recorder_skips_non_billing_tools_and_records_failures():
     assert len(recorder.calls) == 1
     assert recorder.calls[0].error == "connection lost" and not recorder.calls[0].executed
     assert [e.text.split("(")[0] for e in recorder.transcript] == ["skills", "issue_refund"]
+
+
+def test_strands_against_real_make_backend():
+    """The stub MCP server serving Person A's policies through make_backend."""
+    from agentguard.integration import make_backend
+
+    port = _free_port()
+    app = build_server(make_backend, "guarded", port=port).streamable_http_app()
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    threading.Thread(target=server.run, daemon=True).start()
+    deadline = time.time() + 10
+    while not server.started:
+        if time.time() > deadline:
+            pytest.skip("could not start local server (port binding not allowed here)")
+        time.sleep(0.05)
+    try:
+        steps = [("tool", "issue_refund", {"customer_id": "C-1002", "amount": 500, "reason": "QA goodwill"}),
+                 ("text", "I can refund $29.99."), ("text", "ok"), ("text", "ok")]
+        run = run_strands_scenario(get_scenario("S2"), "guarded", ScriptedModel(steps), f"http://127.0.0.1:{port}/mcp")
+    finally:
+        server.should_exit = True
+    receipt = run.blocked_calls[0].receipt
+    assert receipt["violated_policy"] == "max_single_refund"
+    assert receipt["safe_alternative"]["args"]["amount"] == 29.99
+    assert run.final_state["refunds"] == []
