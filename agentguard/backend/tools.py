@@ -17,8 +17,10 @@ from .store import BillingStore
 class BillingTools:
     TOOL_NAMES = ("get_subscription", "apply_discount", "cancel_subscription", "issue_refund")
 
-    def __init__(self, store: BillingStore) -> None:
+    def __init__(self, store: BillingStore, enforce_policies: bool = True) -> None:
         self.store = store
+        # False = naive mode: argument validation and state changes only, no policy checks.
+        self.enforce_policies = enforce_policies
 
     def execute(self, tool_name: str, /, **kwargs: Any) -> ToolResult:
         if tool_name not in self.TOOL_NAMES:
@@ -116,10 +118,13 @@ class BillingTools:
             "cancelled_at": sub.cancelled_at.isoformat() if sub.cancelled_at else None,
             "discount_percent": sub.discount_percent,
             "days_since_start": (self.store.now() - sub.started_at).days,
+            "last_charged_at": sub.last_charged_at.isoformat() if sub.last_charged_at else None,
+            "last_charge_amount": sub.last_charge_amount,
         }
 
-    @staticmethod
-    def _violations(*checks: PolicyViolation | None) -> list[PolicyViolation]:
+    def _violations(self, *checks: PolicyViolation | None) -> list[PolicyViolation]:
+        if not self.enforce_policies:
+            return []
         return [v for v in checks if v is not None]
 
     @staticmethod

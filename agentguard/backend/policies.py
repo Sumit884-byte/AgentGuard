@@ -40,13 +40,18 @@ def check_ownership(sub: Subscription, actor_id: str) -> PolicyViolation | None:
     return None
 
 
+def charge_date(sub: Subscription) -> datetime:
+    """The charge a refund applies to: the latest charge, or the start date when unknown (v1 seed)."""
+    return sub.last_charged_at or sub.started_at
+
+
 def check_refund_window(sub: Subscription, now: datetime) -> PolicyViolation | None:
-    age = now - sub.started_at
+    age = now - charge_date(sub)
     if age > timedelta(days=REFUND_WINDOW_DAYS):
         return PolicyViolation(
             code="REFUND_WINDOW_EXPIRED",
             policy="refund_window_30_days",
-            detail=f"Subscription {sub.id} started {age.days} days ago; refunds are only allowed within {REFUND_WINDOW_DAYS} days",
+            detail=f"Subscription {sub.id} was last charged {age.days} days ago; refunds are only allowed within {REFUND_WINDOW_DAYS} days",
         )
     return None
 

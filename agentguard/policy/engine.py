@@ -8,6 +8,7 @@ not from untrusted input. Same trust as a pytest file.
 """
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 from .cumulative import SessionState
@@ -20,6 +21,15 @@ _SAFE_BUILTINS = {
     "int": int, "float": float, "str": str, "bool": bool,
     "True": True, "False": False, "None": None,
 }
+
+
+def _names(expr: str) -> list[str]:
+    """Variable names a condition reads, in order of first use."""
+    seen: dict[str, None] = {}
+    for node in ast.walk(ast.parse(expr, mode="eval")):
+        if isinstance(node, ast.Name):
+            seen.setdefault(node.id, None)
+    return list(seen)
 
 
 def _safe_eval(expr: str, context: dict) -> bool:
@@ -54,3 +64,21 @@ class PolicyEngine:
                 )
         state.apply_mutation(event)
         return PolicyResult(status="ALLOWED")
+
+    def evaluate_all(self, event: ToolCallEvent, state: SessionState) -> list[tuple[PolicyRule, bool, str, dict]]:
+        """Evaluate every applicable rule in declaration order, without mutating state.
+
+        Returns ``(rule, passed, detail, values)`` per rule, where ``values`` are the
+        context variables the rule's condition reads. Used for decision receipts.
+        """
+        context = state.build_context(event)
+        results = []
+        for rule in (r for r in self.rules if event.tool_name in r.applies_to):
+            values = {name: context[name] for name in _names(rule.condition) if name in context}
+            try:
+                passed = _safe_eval(rule.condition, context)
+                detail = "" if passed else (rule.violation_detail or f"Rule {rule.name!r} failed")
+            except Exception as exc:
+                passed, detail = False, f"Policy {rule.name!r} could not be evaluated: {exc!r}"
+            results.append((rule, passed, detail, values))
+        return results

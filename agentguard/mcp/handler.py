@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from agentguard.backend.policies import charge_date
 from agentguard.backend.seed import build_store
 from agentguard.backend.tools import BillingTools
 from agentguard.policy.cumulative import SessionState
@@ -78,7 +79,7 @@ class BillingHandler:
             sub = self.billing.store.get_subscription(args["sub_id"])
             if sub is not None:
                 args["days_since_charge"] = (
-                    self.billing.store.now() - sub.started_at
+                    self.billing.store.now() - charge_date(sub)
                 ).days
 
         # Layer 1: YAML policy (cumulative + reason + window + negative amount).
