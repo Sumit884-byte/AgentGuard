@@ -16,6 +16,7 @@ from .llm import (
 from .records import ScenarioRun, ToolCallRecord, TranscriptEntry
 from .runner import BackendFactory, run_scenario, run_suite
 from .scenarios import SCENARIOS, SCENARIOS_BY_ID, Scenario, get_scenario
+from .storage import load_run, load_run_dir, new_run_dir, run_from_dict, save_run
 from .tools import TOOL_SPECS, ToolExecutor
 
 __all__ = [
@@ -42,6 +43,11 @@ __all__ = [
     "TranscriptEntry",
     "default_llm",
     "get_scenario",
+    "load_run",
+    "load_run_dir",
+    "new_run_dir",
+    "run_from_dict",
     "run_scenario",
     "run_suite",
+    "save_run",
 ]

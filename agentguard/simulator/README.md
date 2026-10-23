@@ -46,6 +46,19 @@ Each `ScenarioRun` has `initial_state`, `final_state`, `transcript`,
 `status` is `completed`, `refusal`, `max_tool_iterations`, or `error: ...`.
 Partial artifacts are kept on error.
 
+## Saving runs (B4)
+
+```bash
+python -m agentguard.simulator            # 8 scenarios x naive + guarded, Person A's make_backend
+python -m agentguard.simulator --scenarios S1 S3 --modes guarded --run-id try1
+```
+
+Writes `runs/<run_id>/<scenario>.<mode>.json`, each the raw
+`ScenarioRun.to_dict()` (including `targeted_policies` and every record's
+`receipt`). Load them back with `load_run(path)` or `load_run_dir(run_dir)`,
+which returns `{(scenario_id, mode): ScenarioRun}`. The exporter writes
+`<scenario>.trace.json` next to them.
+
 ## Tests
 
 `pytest` runs offline with an in-memory backend and a scripted LLM
