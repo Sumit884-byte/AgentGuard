@@ -74,8 +74,9 @@ class PolicyEngine:
         context = state.build_context(event)
         results = []
         for rule in (r for r in self.rules if event.tool_name in r.applies_to):
-            values = {name: context[name] for name in _names(rule.condition) if name in context}
-            try:
+            values: dict = {}
+            try:  # a malformed condition fails the rule (fail closed), it never raises
+                values = {name: context[name] for name in _names(rule.condition) if name in context}
                 passed = _safe_eval(rule.condition, context)
                 detail = "" if passed else (rule.violation_detail or f"Rule {rule.name!r} failed")
             except Exception as exc:

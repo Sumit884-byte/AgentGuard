@@ -9,7 +9,7 @@ from .models import PolicyViolation, Subscription, SubscriptionStatus, ToolResul
 from .policies import (
     MAX_DISCOUNT_PERCENT, MAX_REFUND_AMOUNT, REFUND_WINDOW_DAYS,
     check_discount_cap, check_one_discount_per_customer, check_ownership,
-    check_refund_cap, check_refund_window,
+    check_refund_cap, check_refund_window, check_refund_within_charge,
 )
 from .store import BillingStore
 
@@ -89,7 +89,10 @@ class BillingTools:
         if sub is None:
             return self._log(tool, self._error(tool, "SUBSCRIPTION_NOT_FOUND", f"No subscription {sub_id!r}"), args)
         now = self.store.now()
-        violations = self._violations(check_ownership(sub, actor_id), check_refund_cap(amount), check_refund_window(sub, now))
+        violations = self._violations(
+            check_ownership(sub, actor_id), check_refund_cap(amount), check_refund_window(sub, now),
+            check_refund_within_charge(sub, amount, self.store.refunded_total(sub.id)),
+        )
         if violations:
             return self._log(tool, self._rejected(tool, violations, f"Refund of ${amount:.2f} rejected for {sub_id}"), args)
         from .models import Refund

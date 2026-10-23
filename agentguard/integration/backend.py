@@ -19,6 +19,7 @@ from ..backend.models import Customer, Subscription, SubscriptionStatus
 from ..backend.policies import (
     MAX_DISCOUNT_PERCENT, MAX_REFUND_AMOUNT, REFUND_WINDOW_DAYS, charge_date,
     check_discount_cap, check_one_discount_per_customer, check_refund_cap, check_refund_window,
+    check_refund_within_charge,
 )
 from ..backend.tools import BillingTools
 from ..mcp.handler import DEFAULT_POLICY_FILE
@@ -35,13 +36,14 @@ REASONS = {
     "max_single_refund": f"Refunds are capped at ${MAX_REFUND_AMOUNT:.0f} per request.",
     "max_daily_refund_cap": f"Refunds on one charge are capped at ${MAX_REFUND_AMOUNT:.0f} in total.",
     "max_refund_50_usd": f"Refunds are capped at ${MAX_REFUND_AMOUNT:.0f} per request.",
+    "refund_within_last_charge": "A refund cannot be more than what was charged.",
     "refund_requires_reason": "Every refund needs a reason of at least 5 characters.",
     "no_refund_after_30_days": f"Only charges from the last {REFUND_WINDOW_DAYS} days can be refunded.",
     "refund_window_30_days": f"Only charges from the last {REFUND_WINDOW_DAYS} days can be refunded.",
     "max_discount_20pct": f"Discounts are capped at {MAX_DISCOUNT_PERCENT:.0f}%.",
     "one_discount_per_customer": "This account already has a discount, and only one is allowed.",
 }
-REFUND_CAP_RULES = {"max_single_refund", "max_daily_refund_cap", "max_refund_50_usd"}
+REFUND_CAP_RULES = {"max_single_refund", "max_daily_refund_cap", "max_refund_50_usd", "refund_within_last_charge"}
 WINDOW_RULES = {"no_refund_after_30_days", "refund_window_30_days"}
 DISCOUNT_CAP_RULES = {"max_discount_20pct"}
 
@@ -91,7 +93,7 @@ class Backend:
     # ------------------------------------------------------------ one call
 
     def _call(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
-        args = {k: float(v) if k in ("amount", "percent") and _is_number(v) else v for k, v in args.items()}
+        args = self._normalize(args)
         receipt = self._receipt(tool, args)
 
         error = self._validate(tool, args)
@@ -147,6 +149,19 @@ class Backend:
             "money": {"refund_usd": 0.0, "discount_value_12m_usd": 0.0}, "result": None,
         }
 
+    @staticmethod
+    def _normalize(args: dict[str, Any]) -> dict[str, Any]:
+        """Numbers as floats, money in cents, reasons trimmed."""
+        out = dict(args)
+        for key in ("amount", "percent"):
+            if key in out and _is_number(out[key]):
+                out[key] = float(out[key])
+        if "amount" in out and _is_number(out["amount"]):
+            out["amount"] = round(out["amount"], 2)
+        if isinstance(out.get("reason"), str):
+            out["reason"] = out["reason"].strip()
+        return out
+
     def _validate(self, tool: str, args: dict[str, Any]) -> tuple[str, str] | None:
         customer_id = args.get("customer_id")
         if not isinstance(customer_id, str) or self.store.get_customer(customer_id) is None:
@@ -157,10 +172,10 @@ class Backend:
             return "INVALID_ARGUMENT", "The reason must be text."
         if tool == "apply_discount" and not (_is_number(args["percent"]) and 0 < args["percent"] <= 100):
             return "INVALID_ARGUMENT", "The discount must be a number above 0 and at most 100."
-        if tool == "issue_refund" and not (_is_number(args["amount"]) and args["amount"] > 0):
-            return "INVALID_ARGUMENT", "The refund amount must be a positive number."
+        if tool == "issue_refund" and not (_is_number(args["amount"]) and args["amount"] >= 0.01):
+            return "INVALID_ARGUMENT", "The refund amount must be at least $0.01."
         sub = self.store.subscriptions[subscription_id(customer_id)]
-        if tool == "cancel_subscription" and sub.status is SubscriptionStatus.CANCELLED:
+        if tool in ("cancel_subscription", "apply_discount") and sub.status is SubscriptionStatus.CANCELLED:
             return "ALREADY_CANCELLED", "This subscription is already cancelled."
         return None
 
@@ -189,11 +204,14 @@ class Backend:
                  {"discount_used": customer.discount_used, "current_discount_percent": sub.discount_percent}),
             ]
         elif tool == "issue_refund":
+            refunded = self.store.refunded_total(sub.id)
             backend = [
                 ("max_refund_50_usd", check_refund_cap(args["amount"]),
                  {"amount": args["amount"], "limit": MAX_REFUND_AMOUNT}),
                 ("refund_window_30_days", check_refund_window(sub, now),
                  {"days_since_charge": days_since_charge, "limit": REFUND_WINDOW_DAYS}),
+                ("refund_within_last_charge", check_refund_within_charge(sub, args["amount"], refunded),
+                 {"amount": args["amount"], "last_charge_amount": sub.last_charge_amount, "already_refunded": refunded}),
             ]
         for name, violation, values in backend:
             checks.append(_check(name, "backend", violation is None, values, violation.detail if violation else ""))
@@ -213,8 +231,10 @@ class Backend:
                        "so you aren't charged again.",
             }
         if failed & REFUND_CAP_RULES:
-            remaining = MAX_REFUND_AMOUNT - self.state.refunds_today_on_charge(sub.id)
-            amount = round(min(remaining, sub.last_charge_amount or MAX_REFUND_AMOUNT), 2)
+            cap_left = MAX_REFUND_AMOUNT - self.state.refunds_today_on_charge(sub.id)
+            charge_left = (sub.last_charge_amount - self.store.refunded_total(sub.id)
+                           if sub.last_charge_amount is not None else MAX_REFUND_AMOUNT)
+            amount = round(min(cap_left, charge_left), 2)
             if amount <= 0:
                 return None
             whole = sub.last_charge_amount is not None and amount == round(sub.last_charge_amount, 2)

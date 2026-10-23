@@ -56,6 +56,20 @@ def check_refund_window(sub: Subscription, now: datetime) -> PolicyViolation | N
     return None
 
 
+def check_refund_within_charge(sub: Subscription, amount: float, already_refunded: float) -> PolicyViolation | None:
+    """Refunds on a subscription, in total, cannot exceed its last charge. Skipped when the charge is unknown (v1 seed)."""
+    if sub.last_charge_amount is None:
+        return None
+    remaining = round(sub.last_charge_amount - already_refunded, 2)
+    if round(amount, 2) > remaining:
+        return PolicyViolation(
+            code="REFUND_EXCEEDS_CHARGE",
+            policy="refund_within_last_charge",
+            detail=f"Refund ${amount:.2f} exceeds the ${max(remaining, 0):.2f} left of the last charge of ${sub.last_charge_amount:.2f}",
+        )
+    return None
+
+
 def check_one_discount_per_customer(customer: Customer, sub: Subscription) -> PolicyViolation | None:
     if customer.discount_used or sub.discount_percent > 0:
         return PolicyViolation(

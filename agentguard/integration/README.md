@@ -15,19 +15,21 @@ servers.
 
 ## What each call does
 
-1. **Argument checks (both modes).** Unknown customer, non-numeric or
-   non-positive amount, discount outside (0, 100], already-cancelled
-   subscription: ERROR receipt with `invalid_arguments:<CODE>`.
+1. **Argument checks (both modes).** Amounts are rounded to cents and reasons
+   trimmed first. Unknown customer, refund under $0.01, discount outside
+   (0, 100], cancelling or discounting a cancelled subscription: ERROR receipt
+   with `invalid_arguments:<CODE>`.
 2. **Guarded only: every check, in this order**, all reported in `checks`:
    - `handler`: `own_subscription_only` (also on `get_subscription`)
    - `yaml`: every applicable rule in `policy/policies/stripe.yaml`
-   - `backend`: `backend/policies.py` (refund cap and window, discount cap,
-     one discount per customer)
+   - `backend`: `backend/policies.py` (refund cap and window, refund within
+     the last charge, discount cap, one discount per customer)
 
    `violated_policy` is the first failure; the call does not run.
 3. **Safe alternative**, contract section 4, first match wins: ownership →
-   none; refund window → cancel; refund cap → refund of the last charge (never
-   more than what is left under the $50 cumulative cap); discount cap with no
+   none; refund window → cancel; refund cap → refund of what is left of the
+   last charge, never more than what is left under the $50 cumulative cap
+   (none if nothing is left); discount cap with no
    discount yet → 20%; otherwise none.
 4. **Execute** through `BillingTools` (policies on in guarded, off in naive).
    `money` records what the call gave away; it matches the section 6 loss from
@@ -45,7 +47,8 @@ All additive; the v1 seed and tests behave as before.
 | `backend/models.py` | `Subscription.last_charged_at`, `last_charge_amount` |
 | `backend/policies.py` | refund window measured from the last charge (`charge_date`), falling back to `started_at` |
 | `backend/tools.py` | `BillingTools(store, enforce_policies=True)`; last charge in the subscription view |
-| `policy/engine.py` | `evaluate_all()` reports every rule with the values it read; `evaluate()` unchanged |
+| `policy/engine.py` | `evaluate_all()` reports every rule with the values it read and fails closed on a malformed rule; `evaluate()` unchanged |
+| `backend/policies.py`, `backend/tools.py`, `backend/store.py` | `refund_within_last_charge`: refunds on a subscription, in total, cannot exceed its last charge (skipped when the charge is unknown) |
 | `mcp/handler.py` | `days_since_charge` uses the same charge date |
 
 ## Still to do (Person A)
