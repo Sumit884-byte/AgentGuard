@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AgentGuard Demo Slides</title>
+<style>
+  :root { --bg: #0a0a0a; --panel: #171717; --line: #262626; --text: #e7ecf5; --muted: #8c99b3;
+          --accent: #22d3ee; --ok: #2fbf71; --bad: #f05454; --warn: #f2b33d; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+               font: 22px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  section { display: none; height: 100vh; padding: 70px 110px; flex-direction: column; justify-content: center; }
+  section.on { display: flex; }
+  h1 { font-size: 76px; line-height: 1.05; margin: 0 0 18px; letter-spacing: -1px; }
+  h1 span, h2 span { color: var(--accent); }
+  h2 { font-size: 46px; margin: 0 0 28px; }
+  .lead { font-size: 30px; color: var(--muted); max-width: 1200px; margin: 0 0 34px; }
+  .pills { display: flex; gap: 14px; flex-wrap: wrap; }
+  .pill { border: 1px solid var(--line); border-radius: 99px; padding: 8px 18px; color: var(--muted); font-size: 20px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px; }
+  .card h3 { margin: 0 0 10px; font-size: 22px; color: var(--accent); }
+  .card ul { margin: 0; padding-left: 20px; color: var(--text); font-size: 19px; }
+  .card li { margin: 4px 0; }
+  .note { color: var(--warn); font-size: 16px; }
+  .flow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 22px; margin-top: 30px; }
+  .flow b { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; font-weight: 600; }
+  .flow i { color: var(--muted); font-style: normal; }
+  .big { font-size: 56px; line-height: 1.15; margin: 0 0 30px; }
+  .big .bad { color: var(--bad); } .big .ok { color: var(--ok); }
+</style>
+</head>
+<body>
+
+<section id="intro">
+  <h1>Agent<span>Guard</span></h1>
+  <p class="lead">Guardrails for AI support agents that can move money: refunds, discounts, cancellations.</p>
+  <div class="pills">
+    <span class="pill">Same agent, run twice</span>
+    <span class="pill">Naive: no checks</span>
+    <span class="pill">Guarded: server-side policies + decision receipts</span>
+    <span class="pill">8 adversarial customers</span>
+  </div>
+</section>
+
+<section id="stack">
+  <h2>Tech <span>stack</span></h2>
+  <div class="grid">
+    <div class="card"><h3>Agent</h3><ul>
+      <li>Python 3.10–3.13 tool-use loop</li>
+      <li>Strands Agents as MCP client</li>
+      <li>Agent Skill: agentguard-billing</li></ul></div>
+    <div class="card"><h3>Models</h3><ul>
+      <li>Gemini via google-genai (live runs)</li>
+      <li>Amazon Bedrock provider + Strands BedrockModel</li>
+      <li class="note">Bedrock: implemented, not yet run live</li></ul></div>
+    <div class="card"><h3>Tools and identity</h3><ul>
+      <li>MCP Python SDK 2.x</li>
+      <li>Streamable HTTP, naive :8001 / guarded :8002</li>
+      <li>Bearer-token identity, never tool arguments</li></ul></div>
+    <div class="card"><h3>Policy</h3><ul>
+      <li>YAML policy engine, all rules evaluated</li>
+      <li>Backend policies in plain Python</li>
+      <li>Decision receipts + safe alternatives</li></ul></div>
+    <div class="card"><h3>Proof</h3><ul>
+      <li>Runs: transcripts, receipts, state before/after</li>
+      <li>Trace exporter + damage scoreboard</li>
+      <li>GitHub Actions CI on 3.10–3.13</li></ul></div>
+    <div class="card"><h3>Experience</h3><ul>
+      <li>Alexa+ style web page</li>
+      <li>Web Speech API: voice in, spoken replies</li>
+      <li>Receipt card under every reply</li></ul></div>
+  </div>
+  <div class="flow"><b>Customer</b><i>→</i><b>Agent</b><i>→ MCP →</i><b>Guarded server</b><i>→</i><b>Ownership · YAML rules · backend policies</b><i>→</i><b>Receipt</b></div>
+</section>
+
+<section id="outro">
+  <p class="big">Same agent. Same customer.<br><span class="ok">The guardrail</span> is the difference.</p>
+  <p class="lead">Rules live on the server, every decision comes with a receipt, and loss is measured from state.</p>
+  <div class="pills"><span class="pill">Alexa+ track: MCP server + Agent Skill</span><span class="pill">Open source: MIT-licensed policy engine</span></div>
+</section>
+
+<script>
+  const show = () => document.querySelectorAll("section").forEach(s => s.classList.toggle("on", "#" + s.id === (location.hash || "#intro")));
+  window.addEventListener("hashchange", show); show();
+</script>
+</body>
+</html>

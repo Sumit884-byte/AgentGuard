@@ -1,5 +1,9 @@
 # Simulated Alexa+ demo (B5)
 
+The page is built with React and shadcn/ui in `ui/` (see `ui/README.md`);
+`server.py` serves the committed build in `ui/dist/` and falls back to the
+plain `index.html` if the build is missing.
+
 One customer talks to two billing agents at once: the **naive** agent (no
 guardrails) and the **guarded** agent (AgentGuard policies). Each reply shows
 the decision receipt of every tool call as a card underneath.

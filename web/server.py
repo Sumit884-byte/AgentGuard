@@ -35,7 +35,11 @@ from agentguard.simulator import (  # noqa: E402
 )
 from agentguard.simulator.runner import BackendFactory  # noqa: E402
 
-INDEX = Path(__file__).resolve().parent / "index.html"
+WEB = Path(__file__).resolve().parent
+DIST = WEB / "ui" / "dist"  # shadcn/React build (web/ui); falls back to the plain page if missing
+INDEX = DIST / "index.html" if (DIST / "index.html").exists() else WEB / "index.html"
+STATIC_TYPES = {".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".svg": "image/svg+xml",
+                ".png": "image/png", ".ico": "image/x-icon"}
 MODES = ("naive", "guarded")
 MAX_SESSIONS = 50
 MAX_BODY_BYTES = 16_384
@@ -153,8 +157,15 @@ def make_handler(demo: Demo) -> type[BaseHTTPRequestHandler]:
             self._send(code, json.dumps(payload, default=str).encode(), "application/json")
 
         def do_GET(self) -> None:
-            if self.path in ("/", "/index.html"):
+            path = self.path.split("?", 1)[0]
+            if path in ("/", "/index.html"):
                 self._send(200, INDEX.read_bytes(), "text/html; charset=utf-8")
+            elif path.startswith("/assets/") and DIST.is_dir():
+                asset = (DIST / path.lstrip("/")).resolve()
+                if asset.is_relative_to(DIST.resolve()) and asset.is_file() and asset.suffix in STATIC_TYPES:
+                    self._send(200, asset.read_bytes(), STATIC_TYPES[asset.suffix])
+                else:
+                    self._json(404, {"error": "not found"})
             elif self.path == "/api/scenarios":
                 self._json(200, {
                     "scenarios": [_scenario_json(s) for s in SCENARIOS],

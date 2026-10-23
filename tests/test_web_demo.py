@@ -72,3 +72,28 @@ def test_unknown_session_is_rejected():
 def test_message_length_is_capped():
     assert web_server.MAX_MESSAGE_CHARS <= 5_000
     assert web_server.MAX_BODY_BYTES <= 65_536
+
+
+def test_static_assets_cannot_escape_dist(tmp_path):
+    import http.client
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    demo = web_server.Demo(backend_factory, "x", llm=ScriptedLLM([]))
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), web_server.make_handler(demo))
+    except PermissionError:
+        pytest.skip("port binding not allowed here")
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=5)
+        for bad in ("/assets/../../server.py", "/assets/%2e%2e/%2e%2e/server.py", "/assets/../../../pyproject.toml"):
+            conn.request("GET", bad)
+            response = conn.getresponse()
+            body = response.read()
+            assert response.status == 404, bad
+            assert b"import" not in body
+        conn.request("GET", "/")
+        assert conn.getresponse().status == 200
+    finally:
+        server.shutdown()
