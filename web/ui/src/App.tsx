@@ -97,7 +97,10 @@ export default function App() {
         addBlocked[m] = side.calls.filter((c) => ["BLOCKED", "NEEDS_APPROVAL"].includes(receiptStatus(c))).length
       }
       setEntries((prev) => ({ naive: [...prev.naive, ...add.naive], guarded: [...prev.guarded, ...add.guarded] }))
-      setGiven((p) => ({ naive: p.naive + addGiven.naive, guarded: p.guarded + addGiven.guarded }))
+      setGiven((p) => ({
+        naive: data.naive.loss ?? p.naive + addGiven.naive,
+        guarded: data.guarded.loss ?? p.guarded + addGiven.guarded,
+      }))
       setBlocked((p) => ({ naive: p.naive + addBlocked.naive, guarded: p.guarded + addBlocked.guarded }))
       say({ naive: data.naive.text, guarded: data.guarded.text })
     } catch (e) {

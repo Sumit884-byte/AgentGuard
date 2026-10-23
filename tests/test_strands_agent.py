@@ -181,3 +181,37 @@ def test_strands_against_real_make_backend():
     assert receipt["violated_policy"] == "max_single_refund"
     assert receipt["safe_alternative"]["args"]["amount"] == 29.99
     assert run.final_state["refunds"] == []
+
+
+def test_remote_backend_runs_tools_on_the_servers(monkeypatch):
+    """make_backend-shaped adapter whose tool calls go over MCP to naive and guarded servers."""
+    from agentguard.integration import make_backend
+    from agentguard.strands_agent.remote_backend import make_backend as remote
+
+    urls, running = {}, []
+    for mode in ("naive", "guarded"):
+        port = _free_port()
+        app = build_server(make_backend, mode, port=port).streamable_http_app()
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+        threading.Thread(target=server.run, daemon=True).start()
+        running.append(server)
+        urls[mode] = f"http://127.0.0.1:{port}/mcp"
+        monkeypatch.setenv(f"AGENTGUARD_{mode.upper()}_URL", urls[mode])
+    deadline = time.time() + 10
+    while not all(s.started for s in running):
+        if time.time() > deadline:
+            pytest.skip("could not start local servers (port binding not allowed here)")
+        time.sleep(0.05)
+    try:
+        scenario = get_scenario("S2")
+        guarded_backend, naive_backend = remote(scenario, "guarded"), remote(scenario, "naive")
+        blocked = guarded_backend.issue_refund("C-1002", 500, "QA goodwill")
+        assert blocked["status"] == "BLOCKED" and blocked["violated_policy"] == "max_single_refund"
+        assert naive_backend.issue_refund("C-1002", 500, "QA goodwill")["status"] == "ALLOWED"
+        assert naive_backend.snapshot()["refunds"][0]["amount"] == 500.0
+        assert guarded_backend.snapshot()["refunds"] == []
+        guarded_backend.close()
+        naive_backend.close()
+    finally:
+        for s in running:
+            s.should_exit = True

@@ -43,6 +43,8 @@ export interface SideResult {
   text: string
   status: string
   calls: ToolCall[]
+  /** Money given away so far in this session, from state (same rule as the scoreboard); null if unknown. */
+  loss: number | null
 }
 
 export interface ChatResult {

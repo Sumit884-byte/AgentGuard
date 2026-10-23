@@ -71,6 +71,7 @@ class Side:
     agent: SupportAgent
     executor: ToolExecutor
     backend: Any
+    initial_state: Any = None
 
 
 @dataclass
@@ -96,7 +97,7 @@ class Demo:
             backend = self.factory(scenario, mode)
             executor = ToolExecutor(backend)
             agent = SupportAgent(llm=self.llm, executor=executor, customer_id=scenario.authenticated_customer_id)
-            sides[mode] = Side(agent, executor, backend)
+            sides[mode] = Side(agent, executor, backend, backend.snapshot())
         if len(self.sessions) >= MAX_SESSIONS:
             self.sessions.pop(next(iter(self.sessions)))
         session_id = uuid.uuid4().hex
@@ -131,7 +132,22 @@ class Demo:
             }
             for c in side.executor.calls[start:]
         ]
-        return {"text": text, "status": status, "calls": calls, "state": side.backend.snapshot()}
+        state = side.backend.snapshot()
+        return {"text": text, "status": status, "calls": calls, "state": state,
+                "loss": session_loss(side.initial_state, state)}
+
+
+def session_loss(initial: Any, current: Any) -> float | None:
+    """Money given away so far, by the same rule as the scoreboard (contracts-v2 section 6).
+
+    None when the backend's snapshots do not have the billing-store shape (test stand-ins).
+    """
+    from agentguard.analytics.export import calculate_state_loss
+
+    try:
+        return calculate_state_loss(initial, current)
+    except Exception:
+        return None
 
 
 def _scenario_json(s) -> dict[str, Any]:
