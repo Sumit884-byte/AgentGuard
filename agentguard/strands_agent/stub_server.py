@@ -178,6 +178,9 @@ def main(argv: list[str] | None = None) -> None:
     except (ImportError, AttributeError) as exc:
         parser.error(f"cannot load backend {args.backend!r}: {exc}")
     port = args.port or DEFAULT_PORTS[args.mode]
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        print("WARNING: admin routes are unauthenticated and demo tokens are guessable; "
+              f"binding to {args.host} exposes them beyond this machine.", file=sys.stderr, flush=True)
     print(f"{args.mode} billing server on http://{args.host}:{port}/mcp (backend {args.backend})", flush=True)
     build_server(factory, args.mode, args.host, port).run("streamable-http", host=args.host, port=port)
 

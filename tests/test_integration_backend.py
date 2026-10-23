@@ -126,12 +126,54 @@ def test_receipt_shape_and_actor_never_in_args():
 
 # --- cumulative refunds, clock, isolation --------------------------------------------------------
 
-def test_split_refunds_hit_the_cumulative_cap_and_alternative_shrinks():
+def test_split_refunds_hit_the_cumulative_cap():
     backend = guarded("S8")
     assert backend.issue_refund("C-1008", 29.99, "duplicate charge")["status"] == "ALLOWED"
     second = backend.issue_refund("C-1008", 29.99, "duplicate charge again")
     assert second["violated_policy"] == "max_daily_refund_cap"
-    assert second["safe_alternative"]["args"]["amount"] == 20.01
+    assert second["safe_alternative"] is None  # the whole charge is already refunded
+
+
+# --- security patch: never refund more than was charged ------------------------------------------
+
+def test_refund_cannot_exceed_the_charge():
+    receipt = guarded("S2").issue_refund("C-1002", 45, "goodwill gesture")
+    assert receipt["status"] == "BLOCKED"
+    assert receipt["violated_policy"] == "refund_within_last_charge"
+    assert receipt["safe_alternative"]["args"]["amount"] == 29.99
+
+
+def test_split_refunds_cannot_exceed_the_charge_and_alternative_offers_the_rest():
+    backend = guarded("S2")
+    assert backend.issue_refund("C-1002", 10, "partial refund")["status"] == "ALLOWED"
+    second = backend.issue_refund("C-1002", 25, "partial refund")
+    assert second["violated_policy"] == "refund_within_last_charge"
+    assert second["safe_alternative"]["args"]["amount"] == 19.99
+    assert backend.issue_refund("C-1002", 19.99, "rest of the charge")["status"] == "ALLOWED"
+    assert backend.issue_refund("C-1002", 0.01, "one more cent")["status"] == "BLOCKED"
+
+
+def test_tool_layer_also_enforces_the_charge_limit():
+    from agentguard.backend.tools import BillingTools
+
+    backend = guarded("S2")
+    result = BillingTools(backend.store).issue_refund("SUB-C-1002", 45, "C-1002")
+    assert not result.ok and result.violations[0].policy == "refund_within_last_charge"
+
+
+@pytest.mark.parametrize(("amount", "reason", "expected"), [
+    (0.001, "tiny refund", "invalid_arguments:INVALID_ARGUMENT"),
+    (10, "     ", "refund_requires_reason"),
+])
+def test_input_hardening(amount, reason, expected):
+    assert guarded("S2").issue_refund("C-1002", amount, reason)["violated_policy"] == expected
+
+
+def test_no_discount_on_cancelled_subscription():
+    for backend in (naive("S1"), guarded("S1")):
+        backend.cancel_subscription("C-1001", "bye")
+        receipt = backend.apply_discount("C-1001", 10, "come back")
+        assert receipt["violated_policy"] == "invalid_arguments:ALREADY_CANCELLED"
 
 
 def test_naive_does_not_update_cumulative_state():
@@ -197,3 +239,17 @@ def test_model_sees_reason_and_safe_alternative():
                                                                      "reason": "retention"})
     assert is_error
     assert content == "Blocked by billing policy: Discounts are capped at 20%. I can offer 20% off instead."
+
+
+def test_malformed_rule_fails_closed():
+    from datetime import datetime, timezone
+
+    from agentguard.policy.cumulative import SessionState
+    from agentguard.policy.engine import PolicyEngine
+    from agentguard.policy.schema import PolicyRule, ToolCallEvent
+
+    engine = PolicyEngine([PolicyRule(name="broken_rule", applies_to=["issue_refund"], condition="amount <=")])
+    event = ToolCallEvent(session_id="s", tool_name="issue_refund", arguments={"amount": 1.0},
+                          timestamp=datetime.now(timezone.utc))
+    [(rule, passed, detail, values)] = engine.evaluate_all(event, SessionState())
+    assert not passed and "could not be evaluated" in detail

@@ -38,6 +38,8 @@ from agentguard.simulator.runner import BackendFactory  # noqa: E402
 INDEX = Path(__file__).resolve().parent / "index.html"
 MODES = ("naive", "guarded")
 MAX_SESSIONS = 50
+MAX_BODY_BYTES = 16_384
+MAX_MESSAGE_CHARS = 2_000
 
 
 def load_dotenv() -> None:
@@ -165,6 +167,9 @@ def make_handler(demo: Demo) -> type[BaseHTTPRequestHandler]:
         def do_POST(self) -> None:
             try:
                 length = int(self.headers.get("Content-Length") or 0)
+                if length > MAX_BODY_BYTES:
+                    self._json(413, {"error": "request too large"})
+                    return
                 body = json.loads(self.rfile.read(length) or b"{}")
                 if self.path == "/api/session":
                     self._json(200, demo.start(body["scenario_id"]))
@@ -172,6 +177,8 @@ def make_handler(demo: Demo) -> type[BaseHTTPRequestHandler]:
                     message = str(body.get("message", "")).strip()
                     if not message:
                         raise ValueError("message is empty")
+                    if len(message) > MAX_MESSAGE_CHARS:
+                        raise ValueError(f"message is longer than {MAX_MESSAGE_CHARS} characters")
                     self._json(200, demo.chat(body["session_id"], message))
                 else:
                     self._json(404, {"error": "not found"})

@@ -31,6 +31,9 @@ class BillingStore:
             key=lambda s: s.id,
         )
 
+    def refunded_total(self, sub_id: str) -> float:
+        return round(sum(r.amount for r in self.refunds if r.subscription_id == sub_id), 2)
+
     def next_refund_id(self) -> str:
         return f"RFD-{len(self.refunds) + 1:04d}"
 

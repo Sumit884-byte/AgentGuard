@@ -67,3 +67,8 @@ def test_unknown_session_is_rejected():
     demo = web_server.Demo(backend_factory, "x", llm=ScriptedLLM([]))
     with pytest.raises(KeyError):
         demo.chat("nope", "hi")
+
+
+def test_message_length_is_capped():
+    assert web_server.MAX_MESSAGE_CHARS <= 5_000
+    assert web_server.MAX_BODY_BYTES <= 65_536
